@@ -9,6 +9,14 @@
     return false;
   }
 
+  // Payment types that indicate a credit (incoming) amount.
+  const CREDIT_TYPES = new Set(['CR','TFR','INT']);
+  function isCreditType(pt) {
+    if (!pt) return false;
+    const clean = (pt||'').toString().toUpperCase().replace(/[^A-Z]/g,'');
+    return CREDIT_TYPES.has(clean);
+  }
+
   function mapMoneyArray(moneyArr, paymentType) {
     let paidOut = '';
     let paidIn = '';
@@ -22,7 +30,7 @@
       paidOut = moneyArr[0];
       balance = moneyArr[1];
     } else if (moneyArr.length === 1) {
-      if (paymentType === 'CR') paidIn = moneyArr[0]; else paidOut = moneyArr[0];
+      if (isCreditType(paymentType)) paidIn = moneyArr[0]; else paidOut = moneyArr[0];
     }
     return {paidIn, paidOut, balance};
   }
@@ -273,8 +281,8 @@
         if (remaining.length === 1) {
           // Single remaining amount: treat as Paid In if payment type looks like credit, otherwise Paid Out
           const single = remaining[0].str;
-          const pt = (paymentType||'').toUpperCase();
-          if (pt === 'CR' || pt === 'CR+' || pt === 'CRD') pin = single; else pout = single;
+          const pt = (paymentType||'').toString();
+          if (isCreditType(pt)) pin = single; else pout = single;
         } else if (remaining.length >= 2) {
           // Multiple remaining amounts: assign left-most => Paid Out, right-most => Paid In
           pout = remaining[0].str;
@@ -287,8 +295,8 @@
         const t = { date: currentDate, paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
         // If both paidIn and paidOut are present, choose one based on paymentType
         if (t.paidIn && t.paidOut) {
-          const pt = (t.paymentType||'').toUpperCase();
-          if (pt === 'CR') t.paidOut = ''; else t.paidIn = '';
+          const pt = (t.paymentType||'').toString();
+          if (isCreditType(pt)) t.paidOut = ''; else t.paidIn = '';
         }
         out.push(t); lastRowObj = t;
       } else {
@@ -314,8 +322,8 @@
             const t = { date: currentDate || '', paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
             // If both paidIn and paidOut are present, select one based on paymentType
             if (t.paidIn && t.paidOut) {
-              const pt = (t.paymentType||'').toUpperCase();
-              if (pt === 'CR') t.paidOut = ''; else t.paidIn = '';
+              const pt = (t.paymentType||'').toString();
+              if (isCreditType(pt)) t.paidOut = ''; else t.paidIn = '';
             }
             if (!isHeaderText(t.details1) && (t.details1 || t.paymentType || t.paidOut || t.paidIn || t.balance)) { out.push(t); lastRowObj = t; }
           }
@@ -392,9 +400,8 @@
         if (r.balance) {
           // move balance to the appropriate side if no side amount exists
           if (!r.paidIn && !r.paidOut) {
-            const pt = (r.paymentType || '').toUpperCase();
-            if (pt === 'CR' || pt === 'CR+' || pt === 'CRD') r.paidIn = r.balance;
-            else r.paidOut = r.balance;
+            const pt = (r.paymentType || '').toString();
+            if (isCreditType(pt)) r.paidIn = r.balance; else r.paidOut = r.balance;
           }
           r.balance = '';
         }
