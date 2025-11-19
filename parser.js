@@ -213,10 +213,31 @@
       return header;
     }
 
+    function extractStandaloneMoney(str) {
+      if (!str) return null;
+      const trimmed = String(str).trim();
+      if (!trimmed) return null;
+      let core = trimmed;
+      let negative = false;
+      if (core.startsWith('(') && core.endsWith(')')) {
+        negative = true;
+        core = core.slice(1, -1).trim();
+      }
+      core = core.replace(/^[£$€]/, '').replace(/[£$€]$/, '');
+      if (core.startsWith('-')) { negative = true; core = core.slice(1); }
+      core = core.replace(/(CR|DR)$/i, '').replace(/,/g, '').replace(/\s+/g, '').replace(/\bnil\b/i, '0').trim();
+      if (!/^\d+(?:\.\d{2})?$/.test(core)) return null;
+      return (negative ? '-' : '') + core;
+    }
+
+    function isStandaloneMoneyToken(str) {
+      return !!extractStandaloneMoney(str);
+    }
+
     const headerCols = detectHeaderColumns(rows.slice(0, 20));
 
     const moneyXs = [];
-    norm.forEach(it => { if (it.str && it.str.match(moneyRegex)) moneyXs.push(Math.round(it.x)); });
+    norm.forEach(it => { if (isStandaloneMoneyToken(it.str)) moneyXs.push(Math.round(it.x)); });
     const uniqMoneyXs = Array.from(new Set(moneyXs)).sort((a,b)=>a-b);
 
     function clusterColumns(xs, tolerance) {
@@ -352,15 +373,20 @@
       const detailsParts = rowItems.filter(it=> {
         if (!it.str) return false;
         if (it.str.match(datePattern)) return false;
-        if (it.str.match(moneyRegex)) return false;
+        if (isStandaloneMoneyToken(it.str)) return false;
         if (paymentTypeItem && it === paymentTypeItem) return false;
         return true;
       }).map(it=>it.str);
       const detailsText = detailsParts.join(' ').trim();
       // Collect money tokens present on this visual row along with their X
       const moneyItems = rowItems
-        .filter(it => it.str && it.str.match(moneyRegex))
-        .map(it => ({ x: Math.round(it.x), str: it.str.replace(/,/g,'') }))
+        .map(it => {
+          if (!it.str) return null;
+          const clean = extractStandaloneMoney(it.str);
+          if (!clean) return null;
+          return { x: Math.round(it.x), str: clean };
+        })
+        .filter(Boolean)
         .sort((a,b) => a.x - b.x);
       let bal = null, pin = null, pout = null;
       if (moneyItems.length) {
