@@ -83,9 +83,16 @@
       paidIn = moneyArr[1];
       balance = moneyArr[2];
     } else if (moneyArr.length === 2) {
-      // two-money-column statement: prefer (paidOut, balance) but allow header override elsewhere
-      paidOut = moneyArr[0];
-      balance = moneyArr[1];
+      // Two values: check if payment type suggests credit
+      if (isCreditType(paymentType)) {
+        // Credit transaction: (paidIn, balance)
+        paidIn = moneyArr[0];
+        balance = moneyArr[1];
+      } else {
+        // Debit transaction: (paidOut, balance)
+        paidOut = moneyArr[0];
+        balance = moneyArr[1];
+      }
     } else if (moneyArr.length === 1) {
       if (isCreditType(paymentType)) paidIn = moneyArr[0]; else paidOut = moneyArr[0];
     }
@@ -385,16 +392,45 @@
         });
 
         const leftovers = tokens.filter(tok => !usedTokens.has(tok.idx)).sort((a,b)=>a.x-b.x);
-        leftovers.forEach(tok => {
-          if (values.paidOut === null) values.paidOut = tok.str;
-          else if (values.paidIn === null) values.paidIn = tok.str;
-          else if (values.balance === null) values.balance = tok.str;
-        });
+        // When filling leftovers, consider payment type for proper assignment
+        if (leftovers.length === 2) {
+          // Two values remaining: determine if (paidOut, balance) or (paidIn, balance)
+          if (isCreditType(paymentType)) {
+            if (values.paidIn === null) values.paidIn = leftovers[0].str;
+            if (values.balance === null) values.balance = leftovers[1].str;
+          } else {
+            if (values.paidOut === null) values.paidOut = leftovers[0].str;
+            if (values.balance === null) values.balance = leftovers[1].str;
+          }
+        } else {
+          leftovers.forEach(tok => {
+            if (values.paidOut === null) values.paidOut = tok.str;
+            else if (values.paidIn === null) values.paidIn = tok.str;
+            else if (values.balance === null) values.balance = tok.str;
+          });
+        }
       } else {
+        // No slot definitions - use positional logic with payment type awareness
         const sorted = tokens.slice().sort((a,b)=>a.x-b.x);
-        if (sorted.length) values.paidOut = sorted[0].str;
-        if (sorted.length >= 2) values.balance = sorted[sorted.length-1].str;
-        if (sorted.length >= 3) values.paidIn = sorted[1].str;
+        if (sorted.length === 2) {
+          if (isCreditType(paymentType)) {
+            values.paidIn = sorted[0].str;
+            values.balance = sorted[1].str;
+          } else {
+            values.paidOut = sorted[0].str;
+            values.balance = sorted[1].str;
+          }
+        } else if (sorted.length >= 3) {
+          values.paidOut = sorted[0].str;
+          values.paidIn = sorted[1].str;
+          values.balance = sorted[2].str;
+        } else if (sorted.length === 1) {
+          if (isCreditType(paymentType)) {
+            values.paidIn = sorted[0].str;
+          } else {
+            values.paidOut = sorted[0].str;
+          }
+        }
       }
 
       return {
