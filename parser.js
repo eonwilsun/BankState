@@ -317,22 +317,32 @@
     }
 
     let paidOutX = null, paidInX = null, balanceX = null;
+    
+    // Prefer header-detected columns first (most reliable)
+    if (typeof headerCols.paidOut === 'number') paidOutX = headerCols.paidOut;
+    if (typeof headerCols.paidIn === 'number') paidInX = headerCols.paidIn;
+    if (typeof headerCols.balance === 'number') balanceX = headerCols.balance;
+    
+    // Fill in missing columns via clustering only if headers didn't find them
     let columnCenters = clusterColumns(uniqMoneyXs, 6);
     if (columnCenters.length > 3) {
       columnCenters = columnCenters.slice(-3);
     }
     columnCenters.sort((a,b)=>a-b);
-    if (columnCenters.length > 0) {
+    
+    if (!paidOutX && !paidInX && !balanceX && columnCenters.length > 0) {
+      // No headers found, use clustering
       paidOutX = columnCenters[0];
       balanceX = columnCenters[columnCenters.length - 1];
       if (columnCenters.length >= 3) {
         paidInX = columnCenters[columnCenters.length - 2];
       }
+    } else {
+      // Headers found some columns, fill gaps with clustering
+      if (!paidOutX && columnCenters.length > 0) paidOutX = columnCenters[0];
+      if (!balanceX && columnCenters.length > 0) balanceX = columnCenters[columnCenters.length - 1];
+      if (!paidInX && columnCenters.length >= 3) paidInX = columnCenters[columnCenters.length - 2];
     }
-
-    if (typeof headerCols.paidOut === 'number') paidOutX = headerCols.paidOut;
-    if (typeof headerCols.paidIn === 'number') paidInX = headerCols.paidIn;
-    if (typeof headerCols.balance === 'number') balanceX = headerCols.balance;
 
     // Debug: log detected columns
     // console.debug('money columns', { uniqMoneyXs, columnCenters, paidOutX, paidInX, balanceX });
