@@ -85,7 +85,7 @@ function renderPreview(rows) {
   if (!rows.length) { preview.innerHTML = '<p>No transactions found.</p>'; return; }
   const table = document.createElement('table');
   const thead = document.createElement('thead');
-  thead.innerHTML = '<tr><th>Date</th><th>Payment Type</th><th>Details 1</th><th>Details 2</th><th>Paid In</th><th>Paid Out</th><th>Balance</th></tr>';
+  thead.innerHTML = '<tr><th>Date</th><th>Payment Type</th><th>Details 1</th><th>Details 2</th><th>Paid Out</th><th>Paid In</th><th>Balance</th></tr>';
   table.appendChild(thead);
   const tbody = document.createElement('tbody');
   rows.forEach(r=>{
@@ -94,7 +94,8 @@ function renderPreview(rows) {
     const displayDate = (r.date && r.date.toString().trim()) ? r.date : (tr._lastDate || '');
     // store last date for next row
     if (displayDate) tr._lastDate = displayDate;
-    tr.innerHTML = `<td>${escapeHtml(displayDate)}</td><td>${escapeHtml(r.paymentType)}</td><td>${escapeHtml(r.details1)}</td><td>${escapeHtml(r.details2)}</td><td>${escapeHtml(r.paidIn)}</td><td>${escapeHtml(r.paidOut)}</td><td>${escapeHtml(r.balance)}</td>`;
+    // Render columns in PDF visual order: Paid Out, Paid In, Balance
+    tr.innerHTML = `<td>${escapeHtml(displayDate)}</td><td>${escapeHtml(r.paymentType)}</td><td>${escapeHtml(r.details1)}</td><td>${escapeHtml(r.details2)}</td><td>${escapeHtml(r.paidOut)}</td><td>${escapeHtml(r.paidIn)}</td><td>${escapeHtml(r.balance)}</td>`;
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
@@ -105,10 +106,10 @@ function renderPreview(rows) {
 function escapeHtml(s){ return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function buildCsv(rows) {
-  const header = ['Date','Payment Type','Details 1','Details 2','Paid In','Paid Out','Balance'];
+  const header = ['Date','Payment Type','Details 1','Details 2','Paid Out','Paid In','Balance'];
   const lines = [header.join(',')];
   rows.forEach(r=>{
-    const vals = [r.date, r.paymentType, r.details1, r.details2, r.paidIn, r.paidOut, r.balance];
+    const vals = [r.date, r.paymentType, r.details1, r.details2, r.paidOut, r.paidIn, r.balance];
     const escaped = vals.map(v => '"' + (''+v).replace(/"/g,'""') + '"');
     lines.push(escaped.join(','));
   });
@@ -123,8 +124,8 @@ downloadCsv.addEventListener('click', ()=>{
 });
 
 downloadXlsx.addEventListener('click', ()=>{
-  const wsData = [ ['Date','Payment Type','Details 1','Details 2','Paid In','Paid Out','Balance'] ];
-  parsedRows.forEach(r=> wsData.push([r.date,r.paymentType,r.details1,r.details2,r.paidIn,r.paidOut,r.balance]));
+  const wsData = [ ['Date','Payment Type','Details 1','Details 2','Paid Out','Paid In','Balance'] ];
+  parsedRows.forEach(r=> wsData.push([r.date,r.paymentType,r.details1,r.details2,r.paidOut,r.paidIn,r.balance]));
   const ws = XLSX.utils.aoa_to_sheet(wsData);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
@@ -149,9 +150,9 @@ function buildXml(rows){
     out += `    <paymentType>${xmlEsc(r.paymentType)}</paymentType>\n`;
     out += `    <details1>${xmlEsc(r.details1)}</details1>\n`;
     out += `    <details2>${xmlEsc(r.details2)}</details2>\n`;
-    out += `    <paidIn>${xmlEsc(r.paidIn)}</paidIn>\n`;
-    out += `    <paidOut>${xmlEsc(r.paidOut)}</paidOut>\n`;
-    out += `    <balance>${xmlEsc(r.balance)}</balance>\n`;
+      out += `    <paidOut>${xmlEsc(r.paidOut)}</paidOut>\n`;
+      out += `    <paidIn>${xmlEsc(r.paidIn)}</paidIn>\n`;
+      out += `    <balance>${xmlEsc(r.balance)}</balance>\n`;
     out += '  </transaction>\n';
   });
   out += '</transactions>\n';
