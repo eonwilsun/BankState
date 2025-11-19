@@ -241,8 +241,22 @@
         // transaction and append to `details2` (this prevents lines like "TAUNTON"
         // appearing as separate rows).
         if (pout || pin || bal) {
-          const t = { date: currentDate || '', paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
-          if (!isHeaderText(t.details1) && (t.details1 || t.paymentType || t.paidOut || t.paidIn || t.balance)) { out.push(t); lastRowObj = t; }
+          // If the previous transaction exists and it has details but no amounts,
+          // this line likely contains the amounts for that previous transaction
+          // (visual layout sometimes places amounts on the following visual line).
+          if (lastRowObj && !(lastRowObj.paidIn || lastRowObj.paidOut || lastRowObj.balance) && lastRowObj.details1) {
+            // attach amounts and any details text to the previous row
+            if (pin) lastRowObj.paidIn = pin;
+            if (pout) lastRowObj.paidOut = pout;
+            if (bal) lastRowObj.balance = bal;
+            if (paymentType && !lastRowObj.paymentType) lastRowObj.paymentType = paymentType;
+            if (detailsText) {
+              if (!lastRowObj.details2) lastRowObj.details2 = detailsText; else lastRowObj.details2 += ' ' + detailsText;
+            }
+          } else {
+            const t = { date: currentDate || '', paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
+            if (!isHeaderText(t.details1) && (t.details1 || t.paymentType || t.paidOut || t.paidIn || t.balance)) { out.push(t); lastRowObj = t; }
+          }
         } else if (detailsText) {
           if (lastRowObj) { if (!lastRowObj.details2) lastRowObj.details2 = detailsText; else lastRowObj.details2 += ' ' + detailsText; }
         }

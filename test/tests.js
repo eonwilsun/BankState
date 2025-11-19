@@ -49,5 +49,19 @@
   assertEq(rows5.length, 1, 'multi-line page items merged into single transaction');
   assertEq(rows5[0].details2.includes('WESTON-S-MARE'), true, 'continuation appended to details2');
 
+  // Test 6: amounts on the following visual line should attach to the previous details
+  const items6 = [
+    { transform: [0,0,0,0,50,640], str: '14 Nov 16' },
+    { transform: [0,0,0,0,120,640], str: 'VIS' },
+    { transform: [0,0,0,0,200,640], str: 'GWR TAUNTON SST' },
+    // next visual line contains the place (TAUNTON) and the amounts — should attach to previous
+    { transform: [0,0,0,0,200,620], str: 'TAUNTON' },
+    { transform: [0,0,0,0,500,620], str: '8.10' }
+  ];
+  const rows6 = parsePageItemsToRows(items6);
+  assertEq(rows6.length, 1, 'amounts on following line attach to previous transaction');
+  assertEq(rows6[0].details2.includes('TAUNTON'), true, 'TAUNTON appended to details2');
+  assertEq(rows6[0].paidOut === '8.10' || rows6[0].paidIn === '8.10', true, 'amount attached to previous transaction');
+
   log('All tests passed.');
 })();
