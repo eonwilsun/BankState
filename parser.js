@@ -298,6 +298,23 @@
     const endIdx = result.findIndex(r => endPattern.test((r.details1||'') + ' ' + (r.details2||'')));
     if (endIdx !== -1) result = result.slice(0, endIdx);
 
+    // Filter out large non-transactional paragraphs often included on statements
+    // (policy text, legal disclaimers). Criteria to drop a row:
+    // - it has no date, no paymentType, and no amount fields, AND
+    // - its combined details length is large (>200 chars) OR it matches known policy keywords.
+    const policyPattern = /financial services compensation scheme|effective from|interest rates|registered in england|ombudsman|financial ombudsman|hsbc bank plc/i;
+    result = result.filter(r => {
+      const combined = ((r.details1||'') + ' ' + (r.details2||'')).trim();
+      const hasDate = !!(r.date);
+      const hasPaymentType = !!(r.paymentType);
+      const hasAmounts = !!(r.paidIn || r.paidOut || r.balance);
+      if (!hasDate && !hasPaymentType && !hasAmounts) {
+        if (combined.length > 200) return false;
+        if (policyPattern.test(combined)) return false;
+      }
+      return true;
+    });
+
     return result;
   }
 
