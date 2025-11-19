@@ -288,8 +288,17 @@
     // Find the first real transaction row: prefers a dated row that isn't a summary,
     // but will also accept a paymentType row as a transaction start.
     const firstRealIdx = safeOut.findIndex(r => ((r.date && !(skipSummaryPattern.test((r.details1||'') + ' ' + (r.details2||'')))) || (r.paymentType && !(skipSummaryPattern.test((r.details1||'') + ' ' + (r.details2||''))))));
-    if (firstRealIdx > 0) return safeOut.slice(firstRealIdx);
-    return safeOut;
+    let result = (firstRealIdx > 0) ? safeOut.slice(firstRealIdx) : safeOut;
+
+    // Remove any trailing summary or carriage markers and everything after them.
+    // Many statements use phrases like 'Last Carried Forward', 'Balance Carried Forward',
+    // 'Balance Carried' or 'Closing Balance' to mark the end of transactions. Drop those
+    // rows and anything after them.
+    const endPattern = /last carried forward|balance carried forward|balance carried|closing balance|balance brought forward/i;
+    const endIdx = result.findIndex(r => endPattern.test((r.details1||'') + ' ' + (r.details2||'')));
+    if (endIdx !== -1) result = result.slice(0, endIdx);
+
+    return result;
   }
 
   // export
