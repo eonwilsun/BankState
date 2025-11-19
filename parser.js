@@ -256,9 +256,52 @@
         return true;
       }).map(it=>it.str);
       const detailsText = detailsParts.join(' ').trim();
-      const bal = findMoneyAt(rowItems, balanceX);
-      const pin = findMoneyAt(rowItems, paidInX);
-      const pout = findMoneyAt(rowItems, paidOutX);
+      // Collect money tokens present on this visual row along with their X
+      const moneyItems = rowItems.filter(it => it.str && it.str.match(moneyRegex)).map(it => ({ x: Math.round(it.x), str: it.str.replace(/,/g,'') }));
+      let bal = null, pin = null, pout = null;
+      if (moneyItems.length) {
+        // Choose balance as the money item nearest to balanceX (or right-most if no balanceX)
+        let balanceCandidate = null;
+        if (balanceX) {
+          let best = null; let bestDist = Infinity;
+          moneyItems.forEach(mi => { const d = Math.abs(mi.x - balanceX); if (d < bestDist) { bestDist = d; best = mi; } });
+          balanceCandidate = best;
+        } else {
+          // fallback: right-most
+          balanceCandidate = moneyItems.slice().sort((a,b)=>b.x-a.x)[0];
+        }
+        if (balanceCandidate) {
+          bal = balanceCandidate.str;
+        }
+
+        // Remaining money items (excluding chosen balance)
+        const remaining = moneyItems.filter(mi => mi !== balanceCandidate).sort((a,b)=>a.x-b.x);
+
+        if (remaining.length === 1) {
+          // Single remaining amount: decide whether it's Paid In or Paid Out.
+          const single = remaining[0].str;
+          const pt = (paymentType||'').toUpperCase();
+          if (pt === 'CR' || pt === 'CR+' || pt === 'CRD') {
+            pin = single;
+          } else {
+            pout = single;
+          }
+        } else if (remaining.length >= 2) {
+          // Two or more: try to map by header proximity if possible, otherwise left->Paid Out, right->Paid In
+          if (paidOutX || paidInX) {
+            // assign each remaining to the nearer header position
+            remaining.forEach(mi => {
+              const dOut = paidOutX ? Math.abs(mi.x - paidOutX) : Infinity;
+              const dIn = paidInX ? Math.abs(mi.x - paidInX) : Infinity;
+              if (dOut <= dIn) pout = pout || mi.str; else pin = pin || mi.str;
+            });
+          } else {
+            // fallback left => Paid Out, right => Paid In
+            pout = remaining[0].str;
+            pin = remaining[remaining.length-1].str;
+          }
+        }
+      }
 
       if (date) {
         currentDate = date;
