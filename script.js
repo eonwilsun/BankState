@@ -64,106 +64,161 @@ function parseLinesToTransactions(lines) {
   const carryForwardRegex = /BALANCE\s+(BROUGHT|CARRIED)\s+FORWARD/i;
   const moneyRegex = /\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+\.\d{2}/g;
 
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i].trim();
-    const dmatch = line.match(dateRegex);
-    if (!dmatch) { i++; continue; }
-    const date = dmatch[1];
-    if (carryForwardRegex.test(line)) { i++; continue; }
-    // remainder after date
-    const rest = line.slice(dmatch[0].length).trim();
+  let currentDate = null;
+  let lastTransaction = null;
 
-    // payment type likely next token (e.g., VIS, CR, DD)
-    let paymentType = '';
-    const ptMatch = rest.match(/^([A-Z]{1,5})\b/);
-    if (ptMatch) paymentType = ptMatch[1];
+  for (let idx = 0; idx < lines.length; idx++) {
+    const raw = lines[idx].trim();
+    if (!raw) continue;
 
-    // find monetary values found directly on this line
-    let moneyFound = (line.match(moneyRegex) || []).map(s=>s.replace(/,/g,''));
+    const dmatch = raw.match(dateRegex);
+    if (dmatch) {
+      // Line contains a date — treat as a new transaction starting point
+      currentDate = dmatch[1];
+      if (carryForwardRegex.test(raw)) continue;
+      const rest = raw.slice(dmatch[0].length).trim();
+      const paymentType = (rest.match(/^([A-Z]{1,5})\b/) || [])[1] || '';
+      let moneyFound = (raw.match(moneyRegex) || []).map(s => s.replace(/,/g, ''));
 
-    // default fields
-    let paidOut = '';
-    let paidIn = '';
-    let balance = '';
+      const details = [];
+      let firstDetail = rest.replace(/^([A-Z]{1,5})\b/, '').trim();
+      firstDetail = firstDetail.replace(moneyRegex, '').trim();
+      if (firstDetail) details.push(firstDetail);
 
-    // collect subsequent lines as detail continuation until next date
-    const details = [];
-    // Derive first detail from rest excluding paymentType and amount tokens
-    let firstDetail = rest.replace(/^([A-Z]{1,5})\b/, '').trim();
-    // remove monetary tokens from the first detail
-    firstDetail = firstDetail.replace(moneyRegex, '').trim();
-    if (firstDetail) details.push(firstDetail);
+      // look ahead to collect following non-date lines that look like part of this transaction
+      let j = idx + 1;
+      while (j < lines.length) {
+        const nxt = lines[j].trim();
+        if (!nxt) { j++; continue; }
+        if (dateRegex.test(nxt)) break; // next transaction with explicit date
+        // if the next line appears to be another transaction (contains money or starts with payment type), stop collecting here
+        const startsWithPayment = !!nxt.match(/^([A-Z]{1,5})\b/);
+        const hasMoney = !!nxt.match(moneyRegex);
+        if (startsWithPayment || hasMoney) break;
+        // otherwise treat as continuation detail
+        details.push(nxt);
+        j++;
+      }
 
-    let j = i + 1;
-    while (j < lines.length && !dateRegex.test(lines[j])) {
-      const txt = lines[j].trim();
-      if (!txt) { j++; continue; }
-      // skip lines that are solely headers or carry forwards
-      if (carryForwardRegex.test(txt)) { j++; break; }
-      // skip lines that look like page headers
-      if (/Your Bank Account details/i.test(txt)) { j++; continue; }
-      // skip lines that are just numbers (balances shown on separate lines)
-      const onlyMoney = txt.match(/^\s*(?:[\d,]+\.\d{2})\s*$/);
-      if (onlyMoney) { j++; continue; }
-      // if line contains money and no letters, skip
-      if (txt.match(/^\d+[\s\d,\.]*$/)) { j++; continue; }
-      details.push(txt);
-      if (details.length >= 3) break; // keep only a couple
-      j++;
+      // Extract trailing amounts from last detail if present
+      if (details.length > 0) {
+        const lastIdx = details.length - 1;
+        const last = details[lastIdx];
+        const tailMatch = last.match(/((?:\d{1,3}(?:,\d{3})*(?:\.\d{2})\s*){1,3})\s*$/);
+        if (tailMatch) {
+          const tail = tailMatch[1].trim();
+          const tailAmounts = (tail.match(moneyRegex) || []).map(s => s.replace(/,/g, ''));
+          details[lastIdx] = last.slice(0, last.lastIndexOf(tail)).trim();
+          moneyFound = moneyFound.concat(tailAmounts);
+        }
+      }
+
+      // Map amounts
+      let paidOut = '';
+      let paidIn = '';
+      let balance = '';
+      if (moneyFound.length >= 3) {
+        paidOut = moneyFound[0];
+        paidIn = moneyFound[1];
+        balance = moneyFound[2];
+      } else if (moneyFound.length === 2) {
+        paidOut = moneyFound[0];
+        balance = moneyFound[1];
+      } else if (moneyFound.length === 1) {
+        if (paymentType === 'CR') paidIn = moneyFound[0]; else paidOut = moneyFound[0];
+      }
+
+      const t = {
+        date: currentDate,
+        paymentType,
+        details1: details[0] || '',
+        details2: details[1] || '',
+        paidIn: paidIn || '',
+        paidOut: paidOut || '',
+        balance: balance || ''
+      };
+      rows.push(t);
+      lastTransaction = t;
+      // advance idx to j-1
+      idx = j - 1;
+      continue;
     }
 
-    // If the last detail contains trailing monetary values, extract them and attach to moneyFound
-    if (details.length > 0) {
-      const lastIdx = details.length - 1;
-      const last = details[lastIdx];
-      // capture 1-3 amounts at the end of the string
-      const tailMatch = last.match(/((?:\d{1,3}(?:,\d{3})*(?:\.\d{2})\s*){1,3})\s*$/);
-      if (tailMatch) {
-        const tail = tailMatch[1].trim();
-        const tailAmounts = (tail.match(moneyRegex) || []).map(s => s.replace(/,/g,''));
-        // remove tail from the detail text
-        details[lastIdx] = last.slice(0, last.lastIndexOf(tail)).trim();
-        // append tail amounts to moneyFound (they appear after existing amounts)
-        moneyFound = moneyFound.concat(tailAmounts);
+    // No date on this line. If we have a currentDate, this line may start a new transaction (e.g., 'VIS ...' on the next line)
+    if (currentDate) {
+      const startsWithPayment = !!raw.match(/^([A-Z]{1,5})\b/);
+      const hasMoney = !!raw.match(moneyRegex);
+      if (startsWithPayment || hasMoney) {
+        // treat as a new transaction on the same date
+        const rest = raw;
+        const paymentType = (rest.match(/^([A-Z]{1,5})\b/) || [])[1] || '';
+        let moneyFound = (rest.match(moneyRegex) || []).map(s => s.replace(/,/g, ''));
+        const details = [];
+        let firstDetail = rest.replace(/^([A-Z]{1,5})\b/, '').trim();
+        firstDetail = firstDetail.replace(moneyRegex, '').trim();
+        if (firstDetail) details.push(firstDetail);
+
+        // look ahead for continuation lines that are not dates and not starting new transactions
+        let j = idx + 1;
+        while (j < lines.length) {
+          const nxt = lines[j].trim();
+          if (!nxt) { j++; continue; }
+          if (dateRegex.test(nxt)) break;
+          const nxtStartsWithPayment = !!nxt.match(/^([A-Z]{1,5})\b/);
+          const nxtHasMoney = !!nxt.match(moneyRegex);
+          if (nxtStartsWithPayment || nxtHasMoney) break;
+          details.push(nxt);
+          j++;
+        }
+
+        // Extract trailing amounts from last detail
+        if (details.length > 0) {
+          const lastIdx = details.length - 1;
+          const last = details[lastIdx];
+          const tailMatch = last.match(/((?:\d{1,3}(?:,\d{3})*(?:\.\d{2})\s*){1,3})\s*$/);
+          if (tailMatch) {
+            const tail = tailMatch[1].trim();
+            const tailAmounts = (tail.match(moneyRegex) || []).map(s => s.replace(/,/g, ''));
+            details[lastIdx] = last.slice(0, last.lastIndexOf(tail)).trim();
+            moneyFound = moneyFound.concat(tailAmounts);
+          }
+        }
+
+        let paidOut = '';
+        let paidIn = '';
+        let balance = '';
+        if (moneyFound.length >= 3) {
+          paidOut = moneyFound[0];
+          paidIn = moneyFound[1];
+          balance = moneyFound[2];
+        } else if (moneyFound.length === 2) {
+          paidOut = moneyFound[0];
+          balance = moneyFound[1];
+        } else if (moneyFound.length === 1) {
+          if (paymentType === 'CR') paidIn = moneyFound[0]; else paidOut = moneyFound[0];
+        }
+
+        const t = {
+          date: currentDate,
+          paymentType,
+          details1: details[0] || '',
+          details2: details[1] || '',
+          paidIn: paidIn || '',
+          paidOut: paidOut || '',
+          balance: balance || ''
+        };
+        rows.push(t);
+        lastTransaction = t;
+        idx = j - 1;
+        continue;
+      }
+
+      // Otherwise treat this line as continuation of the last transaction's details
+      if (lastTransaction) {
+        if (!lastTransaction.details2) lastTransaction.details2 = raw;
+        else lastTransaction.details2 += ' ' + raw;
       }
     }
-
-    // Now map moneyFound to fields using sensible defaults
-    if (moneyFound.length >= 3) {
-      paidOut = moneyFound[0];
-      paidIn = moneyFound[1];
-      balance = moneyFound[2];
-    } else if (moneyFound.length === 2) {
-      // Common layout: paid out then balance (no paid-in column)
-      paidOut = moneyFound[0];
-      balance = moneyFound[1];
-    } else if (moneyFound.length === 1) {
-      // If line is credit (CR) treat as paidIn, otherwise paidOut
-      if (paymentType === 'CR') paidIn = moneyFound[0];
-      else paidOut = moneyFound[0];
-    }
-
-    // details1 and details2 (second might be blank)
-    const details1 = details[0] || '';
-    const details2 = details[1] || '';
-
-    // ignore carry forward specific rows
-    if (/BALANCE\s+(BROUGHT|CARRIED)\s+FORWARD/i.test(details1 + ' ' + details2)) {
-      i = j; continue;
-    }
-
-    rows.push({
-      date,
-      paymentType,
-      details1,
-      details2,
-      paidIn: paidIn || '',
-      paidOut: paidOut || '',
-      balance: balance || ''
-    });
-
-    i = j;
   }
   return rows;
 }
