@@ -20,6 +20,35 @@
   // Canonical payment-type tokens as they appear in statements.
   const PAYMENT_TYPES = ['VIS','ATM','DD','TFR','CR','DR','POS','CHG','INT','SO','SOE','CHEQUE',')))'];
 
+  function canonicalMoneyValue(str) {
+    if (!str) return null;
+    let token = String(str).trim();
+    if (!token) return null;
+    let negative = false;
+    if (token.startsWith('(') && token.endsWith(')')) {
+      negative = true;
+      token = token.slice(1, -1).trim();
+    }
+    token = token.replace(/^[£$€]/, '').replace(/[£$€]$/, '');
+    if (/^(CR|DR)$/i.test(token)) return null;
+    if (token.endsWith('CR') || token.endsWith('cr') || token.endsWith('Cr') || token.endsWith('cR')) {
+      token = token.slice(0, -2).trim();
+    } else if (token.endsWith('DR') || token.endsWith('dr') || token.endsWith('Dr') || token.endsWith('dR')) {
+      token = token.slice(0, -2).trim();
+    }
+    if (token.startsWith('-')) {
+      negative = true;
+      token = token.slice(1).trim();
+    }
+    token = token.replace(/,/g, '').replace(/\s+/g, '');
+    if (!/^\d+\.\d{2}$/.test(token)) return null;
+    return (negative ? '-' : '') + token;
+  }
+
+  function isStrictMoneyToken(str) {
+    return !!canonicalMoneyValue(str);
+  }
+
   function normalizePaidSides(target, fallbackPaymentType, opts) {
     const preferColumnAssignments = !!(opts && opts.preferColumnAssignments);
     const ptRaw = (fallbackPaymentType !== undefined && fallbackPaymentType !== null && fallbackPaymentType !== '')
@@ -84,7 +113,9 @@
             if (re.test(rest)) { paymentType = pt; break; }
           }
         }
-        let moneyFound = (line.match(moneyRegex) || []).map(s => s.replace(/,/g, ''));
+        let moneyFound = (line.match(moneyRegex) || [])
+          .map(canonicalMoneyValue)
+          .filter(Boolean);
 
         const details = [];
         if (rest) {
@@ -97,7 +128,9 @@
           const nxt = (lines[j] || '').trim();
           if (!nxt) { j++; continue; }
           if (dateRegex.test(nxt)) break;
-          const nxtMoney = (nxt.match(moneyRegex) || []).map(s => s.replace(/,/g, ''));
+          const nxtMoney = (nxt.match(moneyRegex) || [])
+            .map(canonicalMoneyValue)
+            .filter(Boolean);
           if (nxtMoney.length > 0) {
             moneyFound = moneyFound.concat(nxtMoney);
             const textOnly = nxt.replace(moneyRegex, '').trim();
@@ -125,7 +158,9 @@
         continue;
       }
 
-      const moneyFound = (line.match(moneyRegex) || []).map(s => s.replace(/,/g, ''));
+      const moneyFound = (line.match(moneyRegex) || [])
+        .map(canonicalMoneyValue)
+        .filter(Boolean);
       const startsWithPayment = !!line.match(/^([A-Z]{1,5})\b/);
       if ((moneyFound.length > 0) || startsWithPayment) {
         let paymentType = (line.match(/^([A-Z]{1,5})\b/) || [])[1] || '';
@@ -213,31 +248,10 @@
       return header;
     }
 
-    function extractStandaloneMoney(str) {
-      if (!str) return null;
-      const trimmed = String(str).trim();
-      if (!trimmed) return null;
-      let core = trimmed;
-      let negative = false;
-      if (core.startsWith('(') && core.endsWith(')')) {
-        negative = true;
-        core = core.slice(1, -1).trim();
-      }
-      core = core.replace(/^[£$€]/, '').replace(/[£$€]$/, '');
-      if (core.startsWith('-')) { negative = true; core = core.slice(1); }
-      core = core.replace(/(CR|DR)$/i, '').replace(/,/g, '').replace(/\s+/g, '').replace(/\bnil\b/i, '0').trim();
-      if (!/^\d+(?:\.\d{2})?$/.test(core)) return null;
-      return (negative ? '-' : '') + core;
-    }
-
-    function isStandaloneMoneyToken(str) {
-      return !!extractStandaloneMoney(str);
-    }
-
     const headerCols = detectHeaderColumns(rows.slice(0, 20));
 
     const moneyXs = [];
-    norm.forEach(it => { if (isStandaloneMoneyToken(it.str)) moneyXs.push(Math.round(it.x)); });
+    norm.forEach(it => { if (isStrictMoneyToken(it.str)) moneyXs.push(Math.round(it.x)); });
     const uniqMoneyXs = Array.from(new Set(moneyXs)).sort((a,b)=>a-b);
 
     function clusterColumns(xs, tolerance) {
@@ -345,7 +359,7 @@
     let lastRowObj = null;
     // If there are leading rows with no useful data (e.g., leftover image placeholders),
     // start processing from the first row that contains a date or a money token.
-    const startIndex = rows.findIndex(r => r.items.some(it => (it.str||'').match(datePattern) || (it.str||'').match(moneyRegex)));
+    const startIndex = rows.findIndex(r => r.items.some(it => (it.str||'').match(datePattern) || isStrictMoneyToken(it.str)));
     if (startIndex > 0) rows = rows.slice(startIndex);
 
     rows.forEach(r=>{
@@ -373,7 +387,7 @@
       const detailsParts = rowItems.filter(it=> {
         if (!it.str) return false;
         if (it.str.match(datePattern)) return false;
-        if (isStandaloneMoneyToken(it.str)) return false;
+        if (isStrictMoneyToken(it.str)) return false;
         if (paymentTypeItem && it === paymentTypeItem) return false;
         return true;
       }).map(it=>it.str);
@@ -382,9 +396,9 @@
       const moneyItems = rowItems
         .map(it => {
           if (!it.str) return null;
-          const clean = extractStandaloneMoney(it.str);
-          if (!clean) return null;
-          return { x: Math.round(it.x), str: clean };
+          const normalized = canonicalMoneyValue(it.str);
+          if (!normalized) return null;
+          return { x: Math.round(it.x), str: normalized };
         })
         .filter(Boolean)
         .sort((a,b) => a.x - b.x);
