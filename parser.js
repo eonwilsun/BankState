@@ -515,12 +515,14 @@
         // If there are no money tokens, treat it as a continuation of the previous
         // transaction and append to `details2` (this prevents lines like "TAUNTON"
         // appearing as separate rows).
+        console.debug('no-date row', { moneyItems, pout, pin, bal, detailsText, lastRowHasAmounts: lastRowObj ? !!(lastRowObj.paidIn || lastRowObj.paidOut || lastRowObj.balance) : null });
         if (pout || pin || bal) {
           // If the previous transaction exists and it has details but no amounts,
           // this line likely contains the amounts for that previous transaction
           // (visual layout sometimes places amounts on the following visual line).
           if (lastRowObj && !(lastRowObj.paidIn || lastRowObj.paidOut || lastRowObj.balance) && lastRowObj.details1) {
             // attach amounts and any details text to the previous row
+            console.debug('attaching amounts to previous row', { lastRowObj, pin, pout, bal });
             if (pin) lastRowObj.paidIn = pin;
             if (pout) lastRowObj.paidOut = pout;
             if (bal) lastRowObj.balance = bal;
