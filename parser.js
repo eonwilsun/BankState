@@ -506,39 +506,9 @@
       else { result[i].date = lastDate; }
     }
 
-    // Ensure only the last row for each date retains a `balance` value.
-    // For earlier rows on the same date, if a `balance` was assigned but
-    // neither `paidIn` nor `paidOut` are set, move that amount to the
-    // appropriate side (Paid In if paymentType suggests credit, otherwise Paid Out),
-    // then clear the `balance` field. This follows the visual PDF rule that
-    // balances appear only on the last entry for a date.
-    const lastIndexByDate = {};
-    const lastIndexWithAmountsByDate = {};
-    result.forEach((r, idx) => {
-      if (r.date) {
-        lastIndexByDate[r.date] = idx;
-        if (r.paidIn || r.paidOut || r.balance) {
-          lastIndexWithAmountsByDate[r.date] = idx;
-        }
-      }
-    });
-    for (let i = 0; i < result.length; i++) {
-      const r = result[i];
-      const lastIdx = (r.date && (lastIndexWithAmountsByDate[r.date] !== undefined))
-        ? lastIndexWithAmountsByDate[r.date]
-        : lastIndexByDate[r.date];
-      if (lastIdx !== undefined && i !== lastIdx) {
-        if (r.balance) {
-          // move balance to the appropriate side if no side amount exists
-          if (!r.paidIn && !r.paidOut) {
-            const pt = (r.paymentType || '').toString();
-            if (isCreditType(pt)) r.paidIn = r.balance; else r.paidOut = r.balance;
-          }
-          r.balance = '';
-        }
-      }
+    result.forEach(r => {
       normalizePaidSides(r, r.paymentType, { preferColumnAssignments: true });
-    }
+    });
 
     return result;
   }
