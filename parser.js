@@ -196,14 +196,27 @@
     const out = [];
     let currentDate = null;
     let lastRowObj = null;
+    const PAYMENT_TYPES = ['VIS','ATM','DD','TFR','CR','DR','POS','CHG','INT','SO','SOE','CHEQUE'];
     rows.forEach(r=>{
       const rowItems = r.items;
       const dateItem = rowItems.find(it=>it.str && it.str.match(datePattern));
       const date = dateItem ? dateItem.str.match(datePattern)[0].trim() : null;
-      const detailsParts = rowItems.filter(it=> it.x > dateX + 1 && (firstMoneyX==null || it.x < firstMoneyX - 1)).map(it=>it.str);
-      const detailsText = detailsParts.join(' ').trim();
-      const paymentTypeItem = rowItems.find(it=>/^[A-Z]{1,5}$/.test(it.str));
+      // Find canonical payment type token by whitelist first (avoids confusing merchant tokens like 'GWR')
+      let paymentTypeItem = rowItems.find(it => PAYMENT_TYPES.includes((it.str||'').toUpperCase()));
+      if (!paymentTypeItem) {
+        // fallback: short uppercase token immediately after date
+        paymentTypeItem = rowItems.find(it => /^([A-Z]{2,4})$/.test(it.str) && it.x > (dateX || 0));
+      }
       const paymentType = paymentTypeItem ? paymentTypeItem.str : '';
+      // Build details from row items excluding date text, money tokens and the detected payment type item
+      const detailsParts = rowItems.filter(it=> {
+        if (!it.str) return false;
+        if (it.str.match(datePattern)) return false;
+        if (it.str.match(moneyRegex)) return false;
+        if (paymentTypeItem && it === paymentTypeItem) return false;
+        return true;
+      }).map(it=>it.str);
+      const detailsText = detailsParts.join(' ').trim();
       const bal = findMoneyAt(rowItems, balanceX);
       const pin = findMoneyAt(rowItems, paidInX);
       const pout = findMoneyAt(rowItems, paidOutX);
