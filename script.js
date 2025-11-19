@@ -62,6 +62,7 @@ function parseLinesToTransactions(lines) {
   const rows = [];
   const dateRegex = /^\s*(\d{1,2}\s+[A-Za-z]{3}\s+\d{2,4})\b/; // e.g., 19 Oct 22
   const carryForwardRegex = /BALANCE\s+(BROUGHT|CARRIED)\s+FORWARD/i;
+  const moneyRegex = /\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+\.\d{2}/g;
 
   let i = 0;
   while (i < lines.length) {
@@ -78,33 +79,19 @@ function parseLinesToTransactions(lines) {
     const ptMatch = rest.match(/^([A-Z]{1,5})\b/);
     if (ptMatch) paymentType = ptMatch[1];
 
-    // find monetary values in this line
-    const moneyRegex = /\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+\.\d{2}/g;
-    const moneyFound = (line.match(moneyRegex) || []).map(s=>s.replace(/,/g,''));
+    // find monetary values found directly on this line
+    let moneyFound = (line.match(moneyRegex) || []).map(s=>s.replace(/,/g,''));
 
     // default fields
     let paidOut = '';
     let paidIn = '';
     let balance = '';
 
-    if (moneyFound.length >= 3) {
-      paidOut = moneyFound[0];
-      paidIn = moneyFound[1];
-      balance = moneyFound[2];
-    } else if (moneyFound.length === 2) {
-      // ambiguous; we assume first = paidOut, second = paidIn
-      paidOut = moneyFound[0];
-      paidIn = moneyFound[1];
-    } else if (moneyFound.length === 1) {
-      // assume paidOut present
-      paidOut = moneyFound[0];
-    }
-
     // collect subsequent lines as detail continuation until next date
     const details = [];
     // Derive first detail from rest excluding paymentType and amount tokens
     let firstDetail = rest.replace(/^([A-Z]{1,5})\b/, '').trim();
-    // remove trailing monetary tokens in rest
+    // remove monetary tokens from the first detail
     firstDetail = firstDetail.replace(moneyRegex, '').trim();
     if (firstDetail) details.push(firstDetail);
 
@@ -124,6 +111,37 @@ function parseLinesToTransactions(lines) {
       details.push(txt);
       if (details.length >= 3) break; // keep only a couple
       j++;
+    }
+
+    // If the last detail contains trailing monetary values, extract them and attach to moneyFound
+    if (details.length > 0) {
+      const lastIdx = details.length - 1;
+      const last = details[lastIdx];
+      // capture 1-3 amounts at the end of the string
+      const tailMatch = last.match(/((?:\d{1,3}(?:,\d{3})*(?:\.\d{2})\s*){1,3})\s*$/);
+      if (tailMatch) {
+        const tail = tailMatch[1].trim();
+        const tailAmounts = (tail.match(moneyRegex) || []).map(s => s.replace(/,/g,''));
+        // remove tail from the detail text
+        details[lastIdx] = last.slice(0, last.lastIndexOf(tail)).trim();
+        // append tail amounts to moneyFound (they appear after existing amounts)
+        moneyFound = moneyFound.concat(tailAmounts);
+      }
+    }
+
+    // Now map moneyFound to fields using sensible defaults
+    if (moneyFound.length >= 3) {
+      paidOut = moneyFound[0];
+      paidIn = moneyFound[1];
+      balance = moneyFound[2];
+    } else if (moneyFound.length === 2) {
+      // Common layout: paid out then balance (no paid-in column)
+      paidOut = moneyFound[0];
+      balance = moneyFound[1];
+    } else if (moneyFound.length === 1) {
+      // If line is credit (CR) treat as paidIn, otherwise paidOut
+      if (paymentType === 'CR') paidIn = moneyFound[0];
+      else paidOut = moneyFound[0];
     }
 
     // details1 and details2 (second might be blank)
