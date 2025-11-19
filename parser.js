@@ -17,6 +17,12 @@
     return CREDIT_TYPES.has(clean);
   }
 
+  // Broad list of payment-type tokens we recognize in parsed rows. Used
+  // by both the line-based and column-aware parsers to find tokens like
+  // 'TFR', 'CR', 'INT' even when extraction doesn't yield an exact
+  // standalone token.
+  const PAYMENT_TYPES = ['VIS','ATM','DD','TFR','CR','DR','POS','CHG','INT','SO','SOE','CHEQUE',')))'];
+
   function mapMoneyArray(moneyArr, paymentType) {
     let paidOut = '';
     let paidIn = '';
@@ -51,7 +57,16 @@
       if (dmatch) {
         currentDate = dmatch[1];
         let rest = line.slice(line.indexOf(dmatch[0]) + dmatch[0].length).trim();
-        const paymentType = (rest.match(/^([A-Z]{1,5})\b/) || [])[1] || '';
+        let paymentType = (rest.match(/^([A-Z]{1,5})\b/) || [])[1] || '';
+        // If we didn't detect an explicit short token at the line start,
+        // try to find known payment-type tokens anywhere in the rest text
+        // (some extractions place the token adjacent to other text).
+        if (!paymentType) {
+          for (const pt of PAYMENT_TYPES) {
+            const re = new RegExp('\\b' + pt.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&') + '\\b', 'i');
+            if (re.test(rest)) { paymentType = pt; break; }
+          }
+        }
         let moneyFound = (line.match(moneyRegex) || []).map(s => s.replace(/,/g, ''));
 
         const details = [];
@@ -95,7 +110,14 @@
       const moneyFound = (line.match(moneyRegex) || []).map(s => s.replace(/,/g, ''));
       const startsWithPayment = !!line.match(/^([A-Z]{1,5})\b/);
       if ((moneyFound.length > 0) || startsWithPayment) {
-        const paymentType = (line.match(/^([A-Z]{1,5})\b/) || [])[1] || '';
+        let paymentType = (line.match(/^([A-Z]{1,5})\b/) || [])[1] || '';
+        if (!paymentType) {
+          // Try to locate any known payment-type token anywhere on the line
+          for (const pt of PAYMENT_TYPES) {
+            const re = new RegExp('\\b' + pt.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&') + '\\b', 'i');
+            if (re.test(line)) { paymentType = pt; break; }
+          }
+        }
         const rest = line.replace(/^([A-Z]{1,5})\b/, '').replace(moneyRegex, '').trim();
         const details = rest ? [rest] : [];
         const mapped = mapMoneyArray(moneyFound, paymentType);
@@ -253,6 +275,18 @@
       if (!paymentTypeItem) {
         // fallback: short uppercase token immediately after date
         paymentTypeItem = rowItems.find(it => /^([A-Z]{2,4})$/.test(it.str) && it.x > (dateX || 0));
+      }
+      // If still not found, attempt fuzzy match: an item that contains
+      // a known payment-type token as a whole word somewhere in its text.
+      if (!paymentTypeItem) {
+        for (const it of rowItems) {
+          if (!it.str) continue;
+          for (const pt of PAYMENT_TYPES) {
+            const re = new RegExp('\\b' + pt.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&') + '\\b', 'i');
+            if (re.test(it.str)) { paymentTypeItem = it; break; }
+          }
+          if (paymentTypeItem) break;
+        }
       }
       const paymentType = paymentTypeItem ? paymentTypeItem.str : '';
       // Build details from row items excluding date text, money tokens and the detected payment type item
