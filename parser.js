@@ -325,30 +325,28 @@
 
     let paidOutX = null, paidInX = null, balanceX = null;
     
-    // Prefer header-detected columns first (most reliable)
-    if (typeof headerCols.paidOut === 'number') paidOutX = headerCols.paidOut;
-    if (typeof headerCols.paidIn === 'number') paidInX = headerCols.paidIn;
-    if (typeof headerCols.balance === 'number') balanceX = headerCols.balance;
-    
-    // Fill in missing columns via clustering only if headers didn't find them
+    // Get clustered column positions first
     let columnCenters = clusterColumns(uniqMoneyXs, 6);
     if (columnCenters.length > 3) {
       columnCenters = columnCenters.slice(-3);
     }
     columnCenters.sort((a,b)=>a-b);
     
-    if (!paidOutX && !paidInX && !balanceX && columnCenters.length > 0) {
-      // No headers found, use clustering
-      paidOutX = columnCenters[0];
+    // Use header detection for Paid Out/In only, always use rightmost cluster for Balance
+    if (typeof headerCols.paidOut === 'number') paidOutX = headerCols.paidOut;
+    if (typeof headerCols.paidIn === 'number') paidInX = headerCols.paidIn;
+    
+    // Balance MUST be rightmost column (header detection can be fooled by "Balance brought forward" text)
+    if (columnCenters.length > 0) {
       balanceX = columnCenters[columnCenters.length - 1];
-      if (columnCenters.length >= 3) {
-        paidInX = columnCenters[columnCenters.length - 2];
-      }
-    } else {
-      // Headers found some columns, fill gaps with clustering
-      if (!paidOutX && columnCenters.length > 0) paidOutX = columnCenters[0];
-      if (!balanceX && columnCenters.length > 0) balanceX = columnCenters[columnCenters.length - 1];
-      if (!paidInX && columnCenters.length >= 3) paidInX = columnCenters[columnCenters.length - 2];
+    }
+    
+    // Fill in missing Paid Out/In columns from clustering
+    if (!paidOutX && columnCenters.length > 0) {
+      paidOutX = columnCenters[0];
+    }
+    if (!paidInX && columnCenters.length >= 3) {
+      paidInX = columnCenters[columnCenters.length - 2];
     }
 
     // Debug: log detected columns
