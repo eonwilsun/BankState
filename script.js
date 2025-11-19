@@ -68,6 +68,15 @@ parseBtn.addEventListener('click', async () => {
       parsedRows = parseLinesToTransactions(fullLines);
     }
 
+    statusEl.textContent = `Parsed ${parsedRows.length} transactions.`;
+    renderPreview(parsedRows);
+    downloadCsv.disabled = downloadXlsx.disabled = downloadXml.disabled = parsedRows.length === 0;
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = 'Error reading PDF: see console.';
+  }
+});
+
 // Parser functions (parseLinesToTransactions / parsePageItemsToRows) are provided by `parser.js`.
 // `parser.js` is included before `script.js` in `index.html` so the functions are available on `window`.
 
