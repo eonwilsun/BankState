@@ -157,83 +157,44 @@
     norm.forEach(it => { if (it.str && it.str.match(moneyRegex)) moneyXs.push(Math.round(it.x)); });
     const uniqMoneyXs = Array.from(new Set(moneyXs)).sort((a,b)=>a-b);
 
-    // Improved header detection: handle headers split across multiple text items
-    const headerMap = {};
-    const paidCandidates = [];
-    const outCandidates = [];
-    const inCandidates = [];
-    norm.forEach(it => {
-      const s = (it.str||'').toLowerCase();
-      if (s.includes('date')) headerMap.date = it.x;
-      if (s.includes('balance')) headerMap.balance = it.x;
-      if (s.includes('paid')) paidCandidates.push(it.x);
-      if (s.includes('out')) outCandidates.push(it.x);
-      if (s.includes('in')) inCandidates.push(it.x);
-    });
-
-    // match paid + out/in by proximity
-    function nearestMatch(aList, bList) {
-      if (!aList.length || !bList.length) return null;
-      let best = null; let bestDist = Infinity;
-      aList.forEach(a => {
-        bList.forEach(b => {
-          const d = Math.abs(a - b);
-          if (d < bestDist) { bestDist = d; best = {a,b}; }
-        });
-      });
-      return best;
+    function clusterColumns(xs, tolerance) {
+      if (!xs.length) return [];
+      const centers = [];
+      let sum = xs[0];
+      let count = 1;
+      let prev = xs[0];
+      for (let i = 1; i < xs.length; i++) {
+        const x = xs[i];
+        if (Math.abs(x - prev) <= tolerance) {
+          sum += x;
+          count++;
+        } else {
+          centers.push(Math.round(sum / count));
+          sum = x;
+          count = 1;
+        }
+        prev = x;
+      }
+      centers.push(Math.round(sum / count));
+      return centers;
     }
 
     let paidOutX = null, paidInX = null, balanceX = null;
-    // Prefer explicit header positions when present
-    if (headerMap.balance) balanceX = headerMap.balance;
-
-    // If we have money X positions, try to map them to Paid Out / Paid In by
-    // choosing the money column whose X is closest to the 'out' header and the
-    // one closest to the 'in' header. This handles statements where the two
-    // amount columns may appear in either order visually.
-    const moneyCols = uniqMoneyXs.slice();
-    if (moneyCols.length > 0) {
-      // If balanceX not set, assume the right-most money column is balance
-      if (!balanceX) balanceX = moneyCols[moneyCols.length - 1];
-
-      // Consider candidate money columns excluding the balance column
-      const candidateMoney = moneyCols.filter(x => Math.abs(x - balanceX) > 1);
-
-      // Helper to compute nearest distance to a list
-      const nearestDistToList = (x, list) => {
-        if (!list || !list.length) return Infinity;
-        return Math.min(...list.map(v => Math.abs(x - v)));
-      };
-
-      // For each candidate money column, decide whether it's 'out' or 'in' by
-      // measuring proximity to the out/in header tokens (if available).
-      const assignments = candidateMoney.map(mx => {
-        const outD = nearestDistToList(mx, outCandidates);
-        const inD = nearestDistToList(mx, inCandidates);
-        return { x: mx, outD, inD };
-      });
-
-      // Prefer header-based assignment when header tokens are present
-      if (outCandidates.length || inCandidates.length) {
-        assignments.forEach(a => {
-          if (a.outD < a.inD) paidOutX = a.x;
-          else paidInX = a.x;
-        });
+    let columnCenters = clusterColumns(uniqMoneyXs, 6);
+    if (columnCenters.length > 3) {
+      columnCenters = columnCenters.slice(-3);
+    }
+    columnCenters.sort((a,b)=>a-b);
+    if (columnCenters.length > 0) {
+      paidOutX = columnCenters[0];
+      balanceX = columnCenters[columnCenters.length - 1];
+      if (columnCenters.length >= 3) {
+        paidInX = columnCenters[columnCenters.length - 2];
       }
-
-      // Fallback: if we still don't have both, assign by left-to-right order
-      const assigned = [paidOutX, paidInX].filter(Boolean);
-      const unassigned = candidateMoney.filter(x => !assigned.includes(x));
-      const sortedCandidates = candidateMoney.sort((a,b)=>a-b);
-      if (!paidOutX && sortedCandidates.length) paidOutX = sortedCandidates[0];
-      if (!paidInX && sortedCandidates.length > 1) paidInX = sortedCandidates[1];
-      // If only one candidate and balance is separate, single amount likely Paid Out
-      if (!paidInX && !paidOutX && sortedCandidates.length === 1) paidOutX = sortedCandidates[0];
     }
 
     // Debug: log detected columns
-    // console.debug('money columns', { uniqMoneyXs, paidOutX, paidInX, balanceX, headerMap });
+    // console.debug('money columns', { uniqMoneyXs, columnCenters, paidOutX, paidInX, balanceX });
 
     // dateX detection
     const datePattern = /^\s*\d{1,2}\s+[A-Za-z]{3}\s+\d{2,4}\b/;
