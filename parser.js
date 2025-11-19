@@ -299,21 +299,29 @@
     if (endIdx !== -1) result = result.slice(0, endIdx);
 
     // Filter out large non-transactional paragraphs often included on statements
-    // (policy text, legal disclaimers). Criteria to drop a row:
-    // - it has no date, no paymentType, and no amount fields, AND
-    // - its combined details length is large (>200 chars) OR it matches known policy keywords.
+    // (policy text, legal disclaimers) and other summary rows that are not
+    // real transactions (e.g., Overdraft Limit, IBAN/account headers). We
+    // drop rows that match known patterns even if they contain an amount.
     const policyPattern = /financial services compensation scheme|effective from|interest rates|registered in england|ombudsman|financial ombudsman|hsbc bank plc/i;
+    const extraSummaryPattern = /overdraft limit|international bank account number|account number|sortcode|registered in england|your bank account details/i;
     result = result.filter(r => {
       const combined = ((r.details1||'') + ' ' + (r.details2||'')).trim();
       const hasDate = !!(r.date);
       const hasPaymentType = !!(r.paymentType);
       const hasAmounts = !!(r.paidIn || r.paidOut || r.balance);
-      if (!hasDate && !hasPaymentType && !hasAmounts) {
-        if (combined.length > 200) return false;
-        if (policyPattern.test(combined)) return false;
-      }
+      // Drop obvious policy/legal paragraphs regardless of amounts
+      if (policyPattern.test(combined) || extraSummaryPattern.test(combined)) return false;
+      // Drop very long non-transaction lines that have no date/payment/amounts
+      if (!hasDate && !hasPaymentType && !hasAmounts && combined.length > 200) return false;
       return true;
     });
+
+    // Propagate missing dates: if a row has no date, use the previous row's date.
+    let lastDate = '';
+    for (let i = 0; i < result.length; i++) {
+      if (result[i].date) { lastDate = result[i].date; }
+      else { result[i].date = lastDate; }
+    }
 
     return result;
   }
