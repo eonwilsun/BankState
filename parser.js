@@ -328,6 +328,10 @@
         pin = assigned.pin || '';
         pout = assigned.pout || '';
         bal = assigned.bal || '';
+        if (isCreditType(paymentType) && !pin && pout) {
+          pin = pout;
+          pout = '';
+        }
       }
 
       if (date) {
@@ -358,12 +362,20 @@
             if (detailsText) {
               if (!lastRowObj.details2) lastRowObj.details2 = detailsText; else lastRowObj.details2 += ' ' + detailsText;
             }
+            if (isCreditType(lastRowObj.paymentType || paymentType) && !lastRowObj.paidIn && lastRowObj.paidOut) {
+              lastRowObj.paidIn = lastRowObj.paidOut;
+              lastRowObj.paidOut = '';
+            }
           } else {
             const t = { date: currentDate || '', paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
             // If both paidIn and paidOut are present, select one based on paymentType
             if (t.paidIn && t.paidOut) {
               const pt = (t.paymentType||'').toString();
               if (isCreditType(pt)) t.paidOut = ''; else t.paidIn = '';
+            }
+            if (!t.paidIn && t.paidOut && isCreditType(t.paymentType || paymentType)) {
+              t.paidIn = t.paidOut;
+              t.paidOut = '';
             }
             if (!isHeaderText(t.details1) && (t.details1 || t.paymentType || t.paidOut || t.paidIn || t.balance)) { out.push(t); lastRowObj = t; }
           }
