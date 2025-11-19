@@ -400,8 +400,9 @@
         if (r.balance) {
           // move balance to the appropriate side if no side amount exists
           if (!r.paidIn && !r.paidOut) {
-            const pt = (r.paymentType || '').toString();
-            if (isCreditType(pt)) r.paidIn = r.balance; else r.paidOut = r.balance;
+            // prefer this row's paymentType, otherwise try the previous row's
+            const surroundingPt = (r.paymentType || (result[i-1] && result[i-1].paymentType) || '').toString();
+            if (isCreditType(surroundingPt)) r.paidIn = r.balance; else r.paidOut = r.balance;
           }
           r.balance = '';
         }
