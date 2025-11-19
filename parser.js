@@ -272,7 +272,9 @@
           moneyItems.push({ x: Math.round(it.x), str: normalized });
           continue;
         }
-        if (!looksLikeMoneyFragment(it.str)) continue;
+        // Only attempt fragment stitching if the fragment contains a decimal point
+        // This prevents phone numbers like "08456056767" from being stitched with amounts
+        if (!looksLikeMoneyFragment(it.str) || !/\./.test(it.str)) continue;
         let combined = it.str;
         let consumed = 0;
         for (let advance = 1; advance <= 2 && (idx + advance) < rowItems.length; advance++) {
