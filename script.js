@@ -90,7 +90,11 @@ function renderPreview(rows) {
   const tbody = document.createElement('tbody');
   rows.forEach(r=>{
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.paymentType)}</td><td>${escapeHtml(r.details1)}</td><td>${escapeHtml(r.details2)}</td><td>${escapeHtml(r.paidIn)}</td><td>${escapeHtml(r.paidOut)}</td><td>${escapeHtml(r.balance)}</td>`;
+    // UI workaround: if a row has no date, display the last non-empty date seen above
+    const displayDate = (r.date && r.date.toString().trim()) ? r.date : (tr._lastDate || '');
+    // store last date for next row
+    if (displayDate) tr._lastDate = displayDate;
+    tr.innerHTML = `<td>${escapeHtml(displayDate)}</td><td>${escapeHtml(r.paymentType)}</td><td>${escapeHtml(r.details1)}</td><td>${escapeHtml(r.details2)}</td><td>${escapeHtml(r.paidIn)}</td><td>${escapeHtml(r.paidOut)}</td><td>${escapeHtml(r.balance)}</td>`;
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
