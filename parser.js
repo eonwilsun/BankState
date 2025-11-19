@@ -231,75 +231,49 @@
     function assignMoneyByColumns(moneyItems, paymentType) {
       if (!moneyItems.length) return { pin: '', pout: '', bal: '' };
       const tokens = moneyItems.map((tok, idx) => ({ ...tok, idx }));
-      const used = new Set();
+      const slotDefs = [];
+      if (typeof paidOutX === 'number') slotDefs.push({ name: 'paidOut', x: paidOutX });
+      if (typeof paidInX === 'number') slotDefs.push({ name: 'paidIn', x: paidInX });
+      if (typeof balanceX === 'number') slotDefs.push({ name: 'balance', x: balanceX });
 
-      const takeClosest = (targetX) => {
-        if (typeof targetX !== 'number') return null;
-        let best = null;
-        tokens.forEach((tok, idx) => {
-          if (used.has(idx)) return;
-          const dist = Math.abs(tok.x - targetX);
-          if (!best || dist < best.dist) best = { tok, idx, dist };
+      const values = { paidOut: null, paidIn: null, balance: null };
+
+      if (slotDefs.length) {
+        const pairs = [];
+        tokens.forEach(tok => {
+          slotDefs.forEach(slot => {
+            pairs.push({ tokenIdx: tok.idx, slotName: slot.name, dist: Math.abs(tok.x - slot.x) });
+          });
         });
-        if (!best) return null;
-        used.add(best.idx);
-        return best.tok;
-      };
-
-      const takeRightMost = () => {
-        let best = null; let bestIdx = -1;
-        tokens.forEach((tok, idx) => {
-          if (used.has(idx)) return;
-          if (!best || tok.x > best.x) { best = tok; bestIdx = idx; }
+        pairs.sort((a,b)=>a.dist-b.dist);
+        const usedTokens = new Set();
+        const usedSlots = new Set();
+        pairs.forEach(pair => {
+          if (usedTokens.has(pair.tokenIdx)) return;
+          if (usedSlots.has(pair.slotName)) return;
+          usedTokens.add(pair.tokenIdx);
+          usedSlots.add(pair.slotName);
+          const tok = tokens.find(t => t.idx === pair.tokenIdx);
+          values[pair.slotName] = tok ? tok.str : '';
         });
-        if (!best) return null;
-        used.add(bestIdx);
-        return best;
-      };
 
-      const takeLeftMost = () => {
-        let best = null; let bestIdx = -1;
-        tokens.forEach((tok, idx) => {
-          if (used.has(idx)) return;
-          if (!best || tok.x < best.x) { best = tok; bestIdx = idx; }
+        const leftovers = tokens.filter(tok => !usedTokens.has(tok.idx)).sort((a,b)=>a.x-b.x);
+        leftovers.forEach(tok => {
+          if (values.paidOut === null) values.paidOut = tok.str;
+          else if (values.paidIn === null) values.paidIn = tok.str;
+          else if (values.balance === null) values.balance = tok.str;
         });
-        if (!best) return null;
-        used.add(bestIdx);
-        return best;
-      };
-
-      let balanceTok = takeClosest(balanceX);
-      if (!balanceTok) balanceTok = takeRightMost();
-
-      let paidOutTok = takeClosest(paidOutX);
-      let paidInTok = takeClosest(paidInX);
-
-      const remaining = tokens.filter(tok => !used.has(tok.idx));
-
-      if (remaining.length === 1 && !(paidOutTok || paidInTok)) {
-        const tok = remaining[0];
-        const outDist = (typeof paidOutX === 'number') ? Math.abs(tok.x - paidOutX) : Infinity;
-        const inDist = (typeof paidInX === 'number') ? Math.abs(tok.x - paidInX) : Infinity;
-        if (inDist < outDist) paidInTok = tok;
-        else if (outDist < inDist) paidOutTok = tok;
-        else {
-          if (isCreditType(paymentType)) paidInTok = tok; else paidOutTok = tok;
-        }
-        used.add(tok.idx);
       } else {
-        if (!paidOutTok) paidOutTok = takeLeftMost();
-        if (!paidInTok) paidInTok = takeRightMost();
-      }
-
-      if (!paidInTok && paidOutTok && isCreditType(paymentType)) {
-        paidInTok = paidOutTok;
-        paidOutTok = null;
+        const sorted = tokens.slice().sort((a,b)=>a.x-b.x);
+        if (sorted.length) values.paidOut = sorted[0].str;
+        if (sorted.length >= 2) values.balance = sorted[sorted.length-1].str;
+        if (sorted.length >= 3) values.paidIn = sorted[1].str;
       }
 
       return {
-        pin: paidInTok ? paidInTok.str : '',
-        pout: paidOutTok ? paidOutTok.str : '',
-        bal: balanceTok ? balanceTok.str : ''
+        pin: values.paidIn || '',
+        pout: values.paidOut || '',
+        bal: values.balance || ''
       };
     }
 
