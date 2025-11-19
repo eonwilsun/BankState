@@ -63,5 +63,18 @@
   assertEq(rows6[0].details2.includes('TAUNTON'), true, 'TAUNTON appended to details2');
   assertEq(rows6[0].paidOut === '8.10' || rows6[0].paidIn === '8.10', true, 'amount attached to previous transaction');
 
+  // Test 7: skip leading summary rows and start at first real transaction date
+  const items7 = [
+    { transform: [0,0,0,0,50,780], str: 'Opening Balance' },
+    { transform: [0,0,0,0,200,760], str: 'Overdraft Limit' },
+    { transform: [0,0,0,0,50,740], str: '12 Nov 16' },
+    { transform: [0,0,0,0,120,740], str: 'VIS' },
+    { transform: [0,0,0,0,200,740], str: 'GWR TAUNTON SST' },
+    { transform: [0,0,0,0,500,740], str: '8.10' }
+  ];
+  const rows7 = parsePageItemsToRows(items7);
+  assertEq(rows7.length, 1, 'leading summaries are skipped and transactions start at first date');
+  assertEq(rows7[0].date.includes('12 Nov'), true, 'first transaction date preserved');
+
   log('All tests passed.');
 })();

@@ -262,7 +262,18 @@
         }
       }
     });
-    return out;
+    // Post-process: remove any rows that contain image placeholders in their text
+    const safeOut = out.filter(r => {
+      const combined = ((r.date||'') + ' ' + (r.paymentType||'') + ' ' + (r.details1||'') + ' ' + (r.details2||'')).toLowerCase();
+      if (/data:image|dataimage/i.test(combined)) return false;
+      return true;
+    });
+
+    // Find the first real transaction: a row with a date that is NOT a summary/balance row
+    const skipSummaryPattern = /balance brought|opening balance|payments in|payments out|closing balance|overdraft limit|balance carried/i;
+    const firstRealIdx = safeOut.findIndex(r => r.date && !(skipSummaryPattern.test((r.details1||'') + ' ' + (r.details2||''))));
+    if (firstRealIdx > 0) return safeOut.slice(firstRealIdx);
+    return safeOut;
   }
 
   // export
