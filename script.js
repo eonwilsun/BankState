@@ -82,11 +82,22 @@ function parseLinesToTransactions(lines) {
     if (!raw) continue;
 
     const dmatch = raw.match(dateRegex);
-    if (dmatch) {
+    // helper to detect obvious header/footer lines
+    function isHeaderText(s) {
+      if (!s) return false;
+      const ss = s.toLowerCase();
+      if (ss.includes('payment type') || ss.includes('your bank account') || ss.includes('balance brought') || ss.includes('balance carried') || ss.includes('account name')) return true;
+      return false;
+    }
+
+    if (date) {
       // Line contains a date — treat as a new transaction starting point
       currentDate = dmatch[1];
-      if (carryForwardRegex.test(raw)) continue;
-      const rest = raw.slice(dmatch[0].length).trim();
+      // skip header/footer rows that sometimes have date-like text but aren't transactions
+      if (!isHeaderText(t.details1) && !(t.details1 === '' && t.paidOut === '' && t.paidIn === '' && t.balance === '')) {
+        out.push(t);
+        lastRowObj = t;
+      }
       const paymentType = (rest.match(/^([A-Z]{1,5})\b/) || [])[1] || '';
       let moneyFound = (raw.match(moneyRegex) || []).map(s => s.replace(/,/g, ''));
 
@@ -327,8 +338,11 @@ function parsePageItemsToRows(items) {
       // if row has amounts or paymentType, treat as new transaction for currentDate
       if ((pout||pin||bal) || paymentType) {
         const t = { date: currentDate || '', paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
-        out.push(t);
-        lastRowObj = t;
+        // skip lines that are clearly header/footer or contain no descriptive text (only amounts)
+        if (!isHeaderText(t.details1) && (t.details1 || t.paymentType || t.paidOut || t.paidIn || t.balance)) {
+          out.push(t);
+          lastRowObj = t;
+        }
       } else if (detailsText) {
         // continuation of previous transaction
         if (lastRowObj) {
