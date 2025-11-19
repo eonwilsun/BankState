@@ -88,12 +88,12 @@ function renderPreview(rows) {
   thead.innerHTML = '<tr><th>Date</th><th>Payment Type</th><th>Details 1</th><th>Details 2</th><th>Paid Out</th><th>Paid In</th><th>Balance</th></tr>';
   table.appendChild(thead);
   const tbody = document.createElement('tbody');
+  let lastDisplayDate = '';
   rows.forEach(r=>{
     const tr = document.createElement('tr');
-    // UI workaround: if a row has no date, display the last non-empty date seen above
-    const displayDate = (r.date && r.date.toString().trim()) ? r.date : (tr._lastDate || '');
-    // store last date for next row
-    if (displayDate) tr._lastDate = displayDate;
+    // Display the row date or fall back to the last non-empty date seen above
+    const displayDate = (r.date && r.date.toString().trim()) ? r.date : lastDisplayDate;
+    if (displayDate) lastDisplayDate = displayDate;
     // Render columns in PDF visual order: Paid Out, Paid In, Balance
     tr.innerHTML = `<td>${escapeHtml(displayDate)}</td><td>${escapeHtml(r.paymentType)}</td><td>${escapeHtml(r.details1)}</td><td>${escapeHtml(r.details2)}</td><td>${escapeHtml(r.paidOut)}</td><td>${escapeHtml(r.paidIn)}</td><td>${escapeHtml(r.balance)}</td>`;
     tbody.appendChild(tr);
