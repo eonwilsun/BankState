@@ -494,6 +494,7 @@
       if (date) {
         currentDate = date;
         const t = { date: currentDate, paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
+        console.debug('row money', { date, paymentType, moneyItems, assigned: { pin, pout, bal }, afterNorm: t });
         normalizePaidSides(t, paymentType, { preferColumnAssignments: true });
         out.push(t); lastRowObj = t;
       } else {
