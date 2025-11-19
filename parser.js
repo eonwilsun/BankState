@@ -271,9 +271,18 @@
         .sort((a,b) => a.x - b.x);
       let bal = null, pin = null, pout = null;
       if (moneyItems.length) {
-        // Choose the right-most money token as the Balance (most statements place balance at the far right)
-        const balanceCandidate = moneyItems[moneyItems.length - 1];
-        bal = balanceCandidate.str;
+        // Choose the balance token.
+        // Prefer the money item nearest to the detected `balanceX` header (if available),
+        // otherwise fall back to the right-most money token.
+        let balanceCandidate = null;
+        if (balanceX) {
+          let best = null; let bestDist = Infinity;
+          moneyItems.forEach(mi => { const d = Math.abs(mi.x - balanceX); if (d < bestDist) { bestDist = d; best = mi; } });
+          balanceCandidate = best;
+        } else {
+          balanceCandidate = moneyItems[moneyItems.length - 1];
+        }
+        bal = balanceCandidate ? balanceCandidate.str : null;
 
         // Remaining tokens on the left (could be 0,1,2...)
         const remaining = moneyItems.slice(0, moneyItems.length - 1);
