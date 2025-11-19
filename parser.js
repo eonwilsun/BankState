@@ -279,10 +279,12 @@
         const remaining = moneyItems.slice(0, moneyItems.length - 1);
 
         if (remaining.length === 1) {
-          // Single remaining amount: treat as Paid In if payment type looks like credit, otherwise Paid Out
+          // Single remaining amount: decide using this row's paymentType or the
+          // previous transaction's paymentType (some statements put the token
+          // on the prior visual line). Prefer the surrounding context.
           const single = remaining[0].str;
-          const pt = (paymentType||'').toString();
-          if (isCreditType(pt)) pin = single; else pout = single;
+          const sourcePt = (paymentType || (lastRowObj && lastRowObj.paymentType) || '').toString();
+          if (isCreditType(sourcePt)) pin = single; else pout = single;
         } else if (remaining.length >= 2) {
           // Multiple remaining amounts: assign left-most => Paid Out, right-most => Paid In
           pout = remaining[0].str;
