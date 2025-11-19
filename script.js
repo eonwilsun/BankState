@@ -71,6 +71,7 @@ parseBtn.addEventListener('click', async () => {
     statusEl.textContent = `Parsed ${parsedRows.length} transactions.`;
     renderPreview(parsedRows);
     downloadCsv.disabled = downloadXlsx.disabled = downloadXml.disabled = parsedRows.length === 0;
+    console.debug('parsedRows', parsedRows.slice(0,30));
   } catch (err) {
     console.error(err);
     statusEl.textContent = 'Error reading PDF: see console.';

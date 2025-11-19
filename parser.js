@@ -130,37 +130,53 @@
     norm.forEach(it => { if (it.str && it.str.match(moneyRegex)) moneyXs.push(Math.round(it.x)); });
     const uniqMoneyXs = Array.from(new Set(moneyXs)).sort((a,b)=>a-b);
 
+    // Improved header detection: handle headers split across multiple text items
     const headerMap = {};
+    const paidCandidates = [];
+    const outCandidates = [];
+    const inCandidates = [];
     norm.forEach(it => {
       const s = (it.str||'').toLowerCase();
       if (s.includes('date')) headerMap.date = it.x;
-      if (s.includes('paid out')) headerMap.paidOut = it.x;
-      if (s.includes('paid in')) headerMap.paidIn = it.x;
       if (s.includes('balance')) headerMap.balance = it.x;
+      if (s.includes('paid')) paidCandidates.push(it.x);
+      if (s.includes('out')) outCandidates.push(it.x);
+      if (s.includes('in')) inCandidates.push(it.x);
     });
 
-    let paidOutX, paidInX, balanceX;
-    // Prefer explicit headers when present
-    if (headerMap.paidOut) paidOutX = headerMap.paidOut;
-    if (headerMap.paidIn) paidInX = headerMap.paidIn;
+    // match paid + out/in by proximity
+    function nearestMatch(aList, bList) {
+      if (!aList.length || !bList.length) return null;
+      let best = null; let bestDist = Infinity;
+      aList.forEach(a => {
+        bList.forEach(b => {
+          const d = Math.abs(a - b);
+          if (d < bestDist) { bestDist = d; best = {a,b}; }
+        });
+      });
+      return best;
+    }
+
+    let paidOutX = null, paidInX = null, balanceX = null;
+    const outMatch = nearestMatch(paidCandidates, outCandidates);
+    if (outMatch) paidOutX = outMatch.b;
+    const inMatch = nearestMatch(paidCandidates, inCandidates);
+    if (inMatch) paidInX = inMatch.b;
     if (headerMap.balance) balanceX = headerMap.balance;
 
-    // If headers provide some but not all positions, fill remaining from detected money columns
+    // Fill remaining from detected money columns (fallback)
     if (!balanceX && uniqMoneyXs.length) balanceX = uniqMoneyXs[uniqMoneyXs.length-1];
     if (!paidInX && uniqMoneyXs.length>=3) paidInX = uniqMoneyXs[uniqMoneyXs.length-2];
     if (!paidOutX && uniqMoneyXs.length>=2) paidOutX = uniqMoneyXs[0];
 
-    // Special-case: if there are exactly 2 money columns and headers indicate 'paid in' and 'paid out' but swapped,
-    // use headerMap positions to set the correct order.
-    if (uniqMoneyXs.length === 2) {
-      // if headers have both paidIn/paidOut, use them
-      if (headerMap.paidIn && headerMap.paidOut) {
-        paidInX = headerMap.paidIn;
-        paidOutX = headerMap.paidOut;
-        // ensure balanceX is the rightmost if not explicitly set
-        if (!balanceX) balanceX = Math.max(...uniqMoneyXs);
-      }
+    // If only two money columns and header positions exist, prefer header-based mapping
+    if (uniqMoneyXs.length === 2 && (paidInX || paidOutX)) {
+      if (!paidInX && headerMap.paidIn) paidInX = headerMap.paidIn;
+      if (!paidOutX && headerMap.paidOut) paidOutX = headerMap.paidOut;
     }
+
+    // Debug: log detected columns
+    // console.debug('money columns', { uniqMoneyXs, paidOutX, paidInX, balanceX, headerMap });
 
     // dateX detection
     const datePattern = /^\s*\d{1,2}\s+[A-Za-z]{3}\s+\d{2,4}\b/;
