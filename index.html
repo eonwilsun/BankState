@@ -1,0 +1,41 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bank Statement → CSV/XLSX/XML</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>Bank Statement → CSV / XLSX / XML</h1>
+
+    <p>Upload a PDF bank statement. The app will extract transaction rows and let you download CSV, XLSX, or XML.</p>
+
+    <div class="controls">
+      <input id="file" type="file" accept="application/pdf">
+      <button id="parseBtn">Parse PDF</button>
+    </div>
+
+    <div id="status">No file selected.</div>
+
+    <div id="preview"></div>
+
+    <div class="export-buttons">
+      <button id="downloadCsv" disabled>Download CSV</button>
+      <button id="downloadXlsx" disabled>Download XLSX</button>
+      <button id="downloadXml" disabled>Download XML</button>
+    </div>
+
+    <footer>
+      <small>Client-side only. Uses PDF.js and SheetJS. Works fully in browser.</small>
+    </footer>
+  </main>
+
+  <!-- PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
+  <!-- SheetJS for XLSX export -->
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
