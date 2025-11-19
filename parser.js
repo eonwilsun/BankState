@@ -178,6 +178,43 @@
     // contain strings like 'dataimage' or 'data:image' and may include private data).
     rows = rows.filter(r => !r.items.some(it => /data:image|dataimage/i.test(it.str || '')));
 
+    function detectHeaderColumns(candidateRows) {
+      const upper = s => (s || '').trim().toLowerCase();
+      const header = { paidOut: null, paidIn: null, balance: null };
+      const configs = [
+        { key: 'paidOut', pattern: /paid\s*out/i, words: ['paid','out'] },
+        { key: 'paidIn', pattern: /paid\s*in/i, words: ['paid','in'] },
+        { key: 'balance', pattern: /balance/i }
+      ];
+      candidateRows.forEach(row => {
+        if (header.paidOut && header.paidIn && header.balance) return;
+        const arr = row.items || [];
+        for (let i = 0; i < arr.length; i++) {
+          const txt = upper(arr[i].str);
+          if (!txt) continue;
+          configs.forEach(cfg => {
+            if (header[cfg.key]) return;
+            if (cfg.pattern.test(txt)) {
+              header[cfg.key] = Math.round(arr[i].x);
+              return;
+            }
+            if (cfg.words && cfg.words.length === 2) {
+              if (txt === cfg.words[0]) {
+                const nextTxt = upper((arr[i+1] || {}).str);
+                if (nextTxt === cfg.words[1]) {
+                  const nextX = arr[i+1] ? arr[i+1].x : arr[i].x;
+                  header[cfg.key] = Math.round((arr[i].x + nextX) / 2);
+                }
+              }
+            }
+          });
+        }
+      });
+      return header;
+    }
+
+    const headerCols = detectHeaderColumns(rows.slice(0, 20));
+
     const moneyXs = [];
     norm.forEach(it => { if (it.str && it.str.match(moneyRegex)) moneyXs.push(Math.round(it.x)); });
     const uniqMoneyXs = Array.from(new Set(moneyXs)).sort((a,b)=>a-b);
@@ -217,6 +254,10 @@
         paidInX = columnCenters[columnCenters.length - 2];
       }
     }
+
+    if (typeof headerCols.paidOut === 'number') paidOutX = headerCols.paidOut;
+    if (typeof headerCols.paidIn === 'number') paidInX = headerCols.paidIn;
+    if (typeof headerCols.balance === 'number') balanceX = headerCols.balance;
 
     // Debug: log detected columns
     // console.debug('money columns', { uniqMoneyXs, columnCenters, paidOutX, paidInX, balanceX });
