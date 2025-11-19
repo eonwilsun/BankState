@@ -483,7 +483,21 @@
         pin = assigned.pin || '';
         pout = assigned.pout || '';
         bal = assigned.bal || '';
-        if (isCreditType(paymentType) && !pin && pout) {
+        
+        // Fallback: if we have 2 money values but balance is empty, use payment-type logic
+        if (moneyItems.length === 2 && !bal) {
+          if (isCreditType(paymentType)) {
+            // Credit: first is paid in, second is balance
+            pin = moneyItems[0].str;
+            bal = moneyItems[1].str;
+            pout = '';
+          } else {
+            // Debit: first is paid out, second is balance
+            pout = moneyItems[0].str;
+            bal = moneyItems[1].str;
+            pin = '';
+          }
+        } else if (isCreditType(paymentType) && !pin && pout) {
           pin = pout;
           pout = '';
         }
