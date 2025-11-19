@@ -20,6 +20,25 @@
   // Canonical payment-type tokens as they appear in statements.
   const PAYMENT_TYPES = ['VIS','ATM','DD','TFR','CR','DR','POS','CHG','INT','SO','SOE','CHEQUE',')))'];
 
+  function normalizePaidSides(target, fallbackPaymentType) {
+    const ptRaw = (fallbackPaymentType !== undefined && fallbackPaymentType !== null && fallbackPaymentType !== '')
+      ? fallbackPaymentType
+      : (target.paymentType || '');
+    const credit = isCreditType(ptRaw);
+
+    if (target.paidIn && target.paidOut) {
+      if (credit) target.paidOut = ''; else target.paidIn = '';
+    }
+
+    if (credit && !target.paidIn && target.paidOut) {
+      target.paidIn = target.paidOut;
+      target.paidOut = '';
+    } else if (!credit && target.paidIn && !target.paidOut) {
+      target.paidOut = target.paidIn;
+      target.paidIn = '';
+    }
+  }
+
   function mapMoneyArray(moneyArr, paymentType) {
     let paidOut = '';
     let paidIn = '';
@@ -35,7 +54,10 @@
     } else if (moneyArr.length === 1) {
       if (isCreditType(paymentType)) paidIn = moneyArr[0]; else paidOut = moneyArr[0];
     }
-    return {paidIn, paidOut, balance};
+    const mapping = { paidIn, paidOut, balance, paymentType };
+    normalizePaidSides(mapping, paymentType);
+    delete mapping.paymentType;
+    return mapping;
   }
 
   function parseLinesToTransactions(lines) {
@@ -95,6 +117,7 @@
           paidOut: mapped.paidOut || '',
           balance: mapped.balance || ''
         };
+        normalizePaidSides(t, paymentType);
         rows.push(t);
         lastTransaction = t;
         i = j - 1;
@@ -123,6 +146,7 @@
           paidOut: mapped.paidOut || '',
           balance: mapped.balance || ''
         };
+        normalizePaidSides(t, paymentType);
         if (!isHeaderText(t.details1) && (t.details1 || t.paymentType || t.paidOut || t.paidIn || t.balance)) {
           rows.push(t);
           lastTransaction = t;
@@ -337,11 +361,7 @@
       if (date) {
         currentDate = date;
         const t = { date: currentDate, paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
-        // If both paidIn and paidOut are present, choose one based on paymentType
-        if (t.paidIn && t.paidOut) {
-          const pt = (t.paymentType||'').toString();
-          if (isCreditType(pt)) t.paidOut = ''; else t.paidIn = '';
-        }
+        normalizePaidSides(t);
         out.push(t); lastRowObj = t;
       } else {
         // No explicit date on this line. If there are money tokens, this is a new
@@ -362,26 +382,16 @@
             if (detailsText) {
               if (!lastRowObj.details2) lastRowObj.details2 = detailsText; else lastRowObj.details2 += ' ' + detailsText;
             }
-            if (isCreditType(lastRowObj.paymentType || paymentType) && !lastRowObj.paidIn && lastRowObj.paidOut) {
-              lastRowObj.paidIn = lastRowObj.paidOut;
-              lastRowObj.paidOut = '';
-            }
+            normalizePaidSides(lastRowObj, paymentType || lastRowObj.paymentType);
           } else {
             const t = { date: currentDate || '', paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
-            // If both paidIn and paidOut are present, select one based on paymentType
-            if (t.paidIn && t.paidOut) {
-              const pt = (t.paymentType||'').toString();
-              if (isCreditType(pt)) t.paidOut = ''; else t.paidIn = '';
-            }
-            if (!t.paidIn && t.paidOut && isCreditType(t.paymentType || paymentType)) {
-              t.paidIn = t.paidOut;
-              t.paidOut = '';
-            }
+            normalizePaidSides(t, paymentType);
             if (!isHeaderText(t.details1) && (t.details1 || t.paymentType || t.paidOut || t.paidIn || t.balance)) { out.push(t); lastRowObj = t; }
           }
         } else if (paymentType) {
           // Payment type without amounts — treat as the start of a transaction row.
           const t = { date: currentDate || '', paymentType, details1: detailsText, details2: '', paidIn: '', paidOut: '', balance: '' };
+          normalizePaidSides(t);
           if (!isHeaderText(t.details1) && (t.details1 || t.paymentType)) { out.push(t); lastRowObj = t; }
         } else if (detailsText) {
           if (lastRowObj) { if (!lastRowObj.details2) lastRowObj.details2 = detailsText; else lastRowObj.details2 += ' ' + detailsText; }
@@ -462,6 +472,7 @@
           r.balance = '';
         }
       }
+      normalizePaidSides(r);
     }
 
     return result;
