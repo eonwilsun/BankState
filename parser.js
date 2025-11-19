@@ -403,16 +403,17 @@
     // percent lines like '19.90 %' or '19.90%' should be ignored (interest rate rows)
     const percentPattern = /\d{1,3}(?:\.\d+)?\s*%/i;
     result = result.filter(r => {
-      const combined = ((r.details1||'') + ' ' + (r.details2||'')).trim();
+      const detailCombined = ((r.details1||'') + ' ' + (r.details2||'')).trim();
+      const rowCombined = (detailCombined + ' ' + (r.paymentType||'') + ' ' + (r.paidIn||'') + ' ' + (r.paidOut||'') + ' ' + (r.balance||'')).trim();
       const hasDate = !!(r.date);
       const hasPaymentType = !!(r.paymentType);
       const hasAmounts = !!(r.paidIn || r.paidOut || r.balance);
       // Drop rows that contain percentage tokens (interest / rate lines)
-      if (percentPattern.test(combined)) return false;
+      if (percentPattern.test(rowCombined)) return false;
       // Drop obvious policy/legal paragraphs regardless of amounts
-      if (policyPattern.test(combined) || extraSummaryPattern.test(combined)) return false;
+      if (policyPattern.test(detailCombined) || extraSummaryPattern.test(detailCombined)) return false;
       // Drop very long non-transaction lines that have no date/payment/amounts
-      if (!hasDate && !hasPaymentType && !hasAmounts && combined.length > 200) return false;
+      if (!hasDate && !hasPaymentType && !hasAmounts && detailCombined.length > 200) return false;
       return true;
     });
 
