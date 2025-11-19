@@ -124,7 +124,11 @@
       ymap.set(it.y, arr);
     });
     const ys = Array.from(ymap.keys()).sort((a,b)=>b-a);
-    const rows = ys.map(y => ({ y, items: ymap.get(y).sort((a,b)=>a.x-b.x) }));
+    let rows = ys.map(y => ({ y, items: ymap.get(y).sort((a,b)=>a.x-b.x) }));
+
+    // Remove rows that are just image placeholders from PDF extraction (these often
+    // contain strings like 'dataimage' or 'data:image' and may include private data).
+    rows = rows.filter(r => !r.items.some(it => /data:image|dataimage/i.test(it.str || '')));
 
     const moneyXs = [];
     norm.forEach(it => { if (it.str && it.str.match(moneyRegex)) moneyXs.push(Math.round(it.x)); });
@@ -197,6 +201,11 @@
     let currentDate = null;
     let lastRowObj = null;
     const PAYMENT_TYPES = ['VIS','ATM','DD','TFR','CR','DR','POS','CHG','INT','SO','SOE','CHEQUE'];
+    // If there are leading rows with no useful data (e.g., leftover image placeholders),
+    // start processing from the first row that contains a date or a money token.
+    const startIndex = rows.findIndex(r => r.items.some(it => (it.str||'').match(datePattern) || (it.str||'').match(moneyRegex)));
+    if (startIndex > 0) rows = rows.slice(startIndex);
+
     rows.forEach(r=>{
       const rowItems = r.items;
       const dateItem = rowItems.find(it=>it.str && it.str.match(datePattern));
@@ -226,7 +235,12 @@
         const t = { date: currentDate, paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
         out.push(t); lastRowObj = t;
       } else {
-        if ((pout||pin||bal) || paymentType) {
+        // No explicit date on this line. If there are money tokens, this is a new
+        // transaction row (some statements put the amounts on the next visual line).
+        // If there are no money tokens, treat it as a continuation of the previous
+        // transaction and append to `details2` (this prevents lines like "TAUNTON"
+        // appearing as separate rows).
+        if (pout || pin || bal) {
           const t = { date: currentDate || '', paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
           if (!isHeaderText(t.details1) && (t.details1 || t.paymentType || t.paidOut || t.paidIn || t.balance)) { out.push(t); lastRowObj = t; }
         } else if (detailsText) {

@@ -24,5 +24,30 @@
   assertEq(rows3[0].paidOut, '50.00', 'paidOut mapped (two columns)');
   assertEq(rows3[0].balance, '850.00', 'balance mapped (two columns)');
 
+  // Test 4: parsePageItemsToRows should skip image placeholder rows (data:image...)
+  const items4 = [
+    { transform: [0,0,0,0,10,700], str: 'dataimage1' },
+    { transform: [0,0,0,0,50,680], str: '13 Nov 16' },
+    { transform: [0,0,0,0,120,680], str: 'VIS' },
+    { transform: [0,0,0,0,200,680], str: 'GWR TAUNTON SST' },
+    { transform: [0,0,0,0,500,680], str: '8.10' }
+  ];
+  const rows4 = parsePageItemsToRows(items4);
+  assertEq(rows4.length, 1, 'skips image placeholder and parses first transaction');
+  assertEq(rows4[0].details1.includes('GWR TAUNTON'), true, 'details preserved after skipping image');
+
+  // Test 5: multi-line transaction (second visual line without date should merge into details2)
+  const items5 = [
+    { transform: [0,0,0,0,50,660], str: '14 Nov 16' },
+    { transform: [0,0,0,0,120,660], str: 'VIS' },
+    { transform: [0,0,0,0,200,660], str: 'GWR WESTON SUP SST' },
+    { transform: [0,0,0,0,500,660], str: '8.10' },
+    // continuation line below with no date and no money
+    { transform: [0,0,0,0,200,645], str: 'WESTON-S-MARE' }
+  ];
+  const rows5 = parsePageItemsToRows(items5);
+  assertEq(rows5.length, 1, 'multi-line page items merged into single transaction');
+  assertEq(rows5[0].details2.includes('WESTON-S-MARE'), true, 'continuation appended to details2');
+
   log('All tests passed.');
 })();
