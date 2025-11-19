@@ -17,10 +17,7 @@
     return CREDIT_TYPES.has(clean);
   }
 
-  // Broad list of payment-type tokens we recognize in parsed rows. Used
-  // by both the line-based and column-aware parsers to find tokens like
-  // 'TFR', 'CR', 'INT' even when extraction doesn't yield an exact
-  // standalone token.
+  // Canonical payment-type tokens as they appear in statements.
   const PAYMENT_TYPES = ['VIS','ATM','DD','TFR','CR','DR','POS','CHG','INT','SO','SOE','CHEQUE',')))'];
 
   function mapMoneyArray(moneyArr, paymentType) {
@@ -58,9 +55,6 @@
         currentDate = dmatch[1];
         let rest = line.slice(line.indexOf(dmatch[0]) + dmatch[0].length).trim();
         let paymentType = (rest.match(/^([A-Z]{1,5})\b/) || [])[1] || '';
-        // If we didn't detect an explicit short token at the line start,
-        // try to find known payment-type tokens anywhere in the rest text
-        // (some extractions place the token adjacent to other text).
         if (!paymentType) {
           for (const pt of PAYMENT_TYPES) {
             const re = new RegExp('\\b' + pt.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&') + '\\b', 'i');
@@ -112,7 +106,6 @@
       if ((moneyFound.length > 0) || startsWithPayment) {
         let paymentType = (line.match(/^([A-Z]{1,5})\b/) || [])[1] || '';
         if (!paymentType) {
-          // Try to locate any known payment-type token anywhere on the line
           for (const pt of PAYMENT_TYPES) {
             const re = new RegExp('\\b' + pt.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&') + '\\b', 'i');
             if (re.test(line)) { paymentType = pt; break; }
@@ -250,68 +243,73 @@
 
     const firstMoneyX = [paidOutX, paidInX, balanceX].filter(Boolean).sort((a,b)=>a-b)[0] || null;
 
-    function findMoneyAt(rowItems, targetX){
-      if (!targetX) return null;
-      let best = null; let bestDist = Infinity;
-      rowItems.forEach(it=>{ if (!it.str.match(moneyRegex)) return; const d = Math.abs(it.x - targetX); if (d < bestDist) { bestDist = d; best = it.str.replace(/,/g,''); }});
-      return best;
-    }
-
-    function assignMoneyByColumns(moneyItems) {
+    function assignMoneyByColumns(moneyItems, paymentType) {
       if (!moneyItems.length) return { pin: '', pout: '', bal: '' };
+      const tokens = moneyItems.map((tok, idx) => ({ ...tok, idx }));
       const used = new Set();
+
       const takeClosest = (targetX) => {
         if (typeof targetX !== 'number') return null;
-        let bestIdx = -1;
-        let bestDist = Infinity;
-        for (let i = 0; i < moneyItems.length; i++) {
-          if (used.has(i)) continue;
-          const d = Math.abs(moneyItems[i].x - targetX);
-          if (d < bestDist) {
-            bestDist = d;
-            bestIdx = i;
-          }
-        }
-        if (bestIdx === -1) return null;
-        used.add(bestIdx);
-        return moneyItems[bestIdx];
+        let best = null;
+        tokens.forEach((tok, idx) => {
+          if (used.has(idx)) return;
+          const dist = Math.abs(tok.x - targetX);
+          if (!best || dist < best.dist) best = { tok, idx, dist };
+        });
+        if (!best) return null;
+        used.add(best.idx);
+        return best.tok;
       };
-      const takeLeftMost = () => {
-        let bestIdx = -1;
-        let bestX = Infinity;
-        for (let i = 0; i < moneyItems.length; i++) {
-          if (used.has(i)) continue;
-          if (moneyItems[i].x < bestX) {
-            bestX = moneyItems[i].x;
-            bestIdx = i;
-          }
-        }
-        if (bestIdx === -1) return null;
-        used.add(bestIdx);
-        return moneyItems[bestIdx];
-      };
+
       const takeRightMost = () => {
-        let bestIdx = -1;
-        let bestX = -Infinity;
-        for (let i = 0; i < moneyItems.length; i++) {
-          if (used.has(i)) continue;
-          if (moneyItems[i].x > bestX) {
-            bestX = moneyItems[i].x;
-            bestIdx = i;
-          }
-        }
-        if (bestIdx === -1) return null;
+        let best = null; let bestIdx = -1;
+        tokens.forEach((tok, idx) => {
+          if (used.has(idx)) return;
+          if (!best || tok.x > best.x) { best = tok; bestIdx = idx; }
+        });
+        if (!best) return null;
         used.add(bestIdx);
-        return moneyItems[bestIdx];
+        return best;
+      };
+
+      const takeLeftMost = () => {
+        let best = null; let bestIdx = -1;
+        tokens.forEach((tok, idx) => {
+          if (used.has(idx)) return;
+          if (!best || tok.x < best.x) { best = tok; bestIdx = idx; }
+        });
+        if (!best) return null;
+        used.add(bestIdx);
+        return best;
       };
 
       let balanceTok = takeClosest(balanceX);
       if (!balanceTok) balanceTok = takeRightMost();
+
       let paidOutTok = takeClosest(paidOutX);
       let paidInTok = takeClosest(paidInX);
 
-      if (!paidOutTok) paidOutTok = takeLeftMost();
-      if (!paidInTok) paidInTok = takeRightMost();
+      const remaining = tokens.filter(tok => !used.has(tok.idx));
+
+      if (remaining.length === 1 && !(paidOutTok || paidInTok)) {
+        const tok = remaining[0];
+        const outDist = (typeof paidOutX === 'number') ? Math.abs(tok.x - paidOutX) : Infinity;
+        const inDist = (typeof paidInX === 'number') ? Math.abs(tok.x - paidInX) : Infinity;
+        if (inDist < outDist) paidInTok = tok;
+        else if (outDist < inDist) paidOutTok = tok;
+        else {
+          if (isCreditType(paymentType)) paidInTok = tok; else paidOutTok = tok;
+        }
+        used.add(tok.idx);
+      } else {
+        if (!paidOutTok) paidOutTok = takeLeftMost();
+        if (!paidInTok) paidInTok = takeRightMost();
+      }
+
+      if (!paidInTok && paidOutTok && isCreditType(paymentType)) {
+        paidInTok = paidOutTok;
+        paidOutTok = null;
+      }
 
       return {
         pin: paidInTok ? paidInTok.str : '',
@@ -338,8 +336,6 @@
         // fallback: short uppercase token immediately after date
         paymentTypeItem = rowItems.find(it => /^([A-Z]{2,4})$/.test(it.str) && it.x > (dateX || 0));
       }
-      // If still not found, attempt fuzzy match: an item that contains
-      // a known payment-type token as a whole word somewhere in its text.
       if (!paymentTypeItem) {
         for (const it of rowItems) {
           if (!it.str) continue;
@@ -367,10 +363,10 @@
         .sort((a,b) => a.x - b.x);
       let bal = null, pin = null, pout = null;
       if (moneyItems.length) {
-        const assigned = assignMoneyByColumns(moneyItems);
-        pin = assigned.pin || null;
-        pout = assigned.pout || null;
-        bal = assigned.bal || null;
+        const assigned = assignMoneyByColumns(moneyItems, paymentType);
+        pin = assigned.pin || '';
+        pout = assigned.pout || '';
+        bal = assigned.bal || '';
       }
 
       if (date) {
