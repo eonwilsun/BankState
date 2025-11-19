@@ -345,7 +345,7 @@
     }
 
     // Debug: log detected columns
-    // console.debug('money columns', { uniqMoneyXs, columnCenters, paidOutX, paidInX, balanceX });
+    console.debug('money columns', { uniqMoneyXs, columnCenters, paidOutX, paidInX, balanceX, headerCols });
 
     // dateX detection
     const datePattern = /^\s*\d{1,2}\s+[A-Za-z]{3}\s+\d{2,4}\b/;
