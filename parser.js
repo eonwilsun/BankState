@@ -271,29 +271,18 @@
         .sort((a,b) => a.x - b.x);
       let bal = null, pin = null, pout = null;
       if (moneyItems.length) {
-        // Choose the balance token.
-        // Prefer the money item nearest to the detected `balanceX` header (if available),
-        // otherwise fall back to the right-most money token.
-        let balanceCandidate = null;
-        if (balanceX) {
-          let best = null; let bestDist = Infinity;
-          moneyItems.forEach(mi => { const d = Math.abs(mi.x - balanceX); if (d < bestDist) { bestDist = d; best = mi; } });
-          balanceCandidate = best;
-        } else {
-          balanceCandidate = moneyItems[moneyItems.length - 1];
-        }
-        bal = balanceCandidate ? balanceCandidate.str : null;
+        // Choose the right-most money token as the Balance (most statements place balance at the far right)
+        const balanceCandidate = moneyItems[moneyItems.length - 1];
+        bal = balanceCandidate.str;
 
         // Remaining tokens on the left (could be 0,1,2...)
         const remaining = moneyItems.slice(0, moneyItems.length - 1);
 
         if (remaining.length === 1) {
-          // Single remaining amount: decide using this row's paymentType or the
-          // previous transaction's paymentType (some statements put the token
-          // on the prior visual line). Prefer the surrounding context.
+          // Single remaining amount: treat as Paid In if payment type looks like credit, otherwise Paid Out
           const single = remaining[0].str;
-          const sourcePt = (paymentType || (lastRowObj && lastRowObj.paymentType) || '').toString();
-          if (isCreditType(sourcePt)) pin = single; else pout = single;
+          const pt = (paymentType||'').toString();
+          if (isCreditType(pt)) pin = single; else pout = single;
         } else if (remaining.length >= 2) {
           // Multiple remaining amounts: assign left-most => Paid Out, right-most => Paid In
           pout = remaining[0].str;
@@ -375,11 +364,15 @@
     // drop rows that match known patterns even if they contain an amount.
     const policyPattern = /financial services compensation scheme|effective from|interest rates|registered in england|ombudsman|financial ombudsman|hsbc bank plc/i;
     const extraSummaryPattern = /overdraft limit|international bank account number|account number|sortcode|registered in england|your bank account details/i;
+    // percent lines like '19.90 %' or '19.90%' should be ignored (interest rate rows)
+    const percentPattern = /\d{1,3}(?:\.\d+)?\s*%/i;
     result = result.filter(r => {
       const combined = ((r.details1||'') + ' ' + (r.details2||'')).trim();
       const hasDate = !!(r.date);
       const hasPaymentType = !!(r.paymentType);
       const hasAmounts = !!(r.paidIn || r.paidOut || r.balance);
+      // Drop rows that contain percentage tokens (interest / rate lines)
+      if (percentPattern.test(combined)) return false;
       // Drop obvious policy/legal paragraphs regardless of amounts
       if (policyPattern.test(combined) || extraSummaryPattern.test(combined)) return false;
       // Drop very long non-transaction lines that have no date/payment/amounts
@@ -411,9 +404,8 @@
         if (r.balance) {
           // move balance to the appropriate side if no side amount exists
           if (!r.paidIn && !r.paidOut) {
-            // prefer this row's paymentType, otherwise try the previous row's
-            const surroundingPt = (r.paymentType || (result[i-1] && result[i-1].paymentType) || '').toString();
-            if (isCreditType(surroundingPt)) r.paidIn = r.balance; else r.paidOut = r.balance;
+            const pt = (r.paymentType || '').toString();
+            if (isCreditType(pt)) r.paidIn = r.balance; else r.paidOut = r.balance;
           }
           r.balance = '';
         }
