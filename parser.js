@@ -49,6 +49,11 @@
     return !!canonicalMoneyValue(str);
   }
 
+  function looksLikeMoneyFragment(str) {
+    if (!str) return false;
+    return /^[£$€()\d\s,\.\-]+$/.test(str);
+  }
+
   function normalizePaidSides(target, fallbackPaymentType, opts) {
     const preferColumnAssignments = !!(opts && opts.preferColumnAssignments);
     const ptRaw = (fallbackPaymentType !== undefined && fallbackPaymentType !== null && fallbackPaymentType !== '')
@@ -392,16 +397,38 @@
         return true;
       }).map(it=>it.str);
       const detailsText = detailsParts.join(' ').trim();
-      // Collect money tokens present on this visual row along with their X
-      const moneyItems = rowItems
-        .map(it => {
-          if (!it.str) return null;
-          const normalized = canonicalMoneyValue(it.str);
-          if (!normalized) return null;
-          return { x: Math.round(it.x), str: normalized };
-        })
-        .filter(Boolean)
-        .sort((a,b) => a.x - b.x);
+      // Collect money tokens present on this visual row along with their X.
+      // Some PDFs split balances like "1,672." + "99"; stitch adjacent
+      // fragments so we still capture a canonical money value.
+      const moneyItems = [];
+      for (let idx = 0; idx < rowItems.length; idx++) {
+        const it = rowItems[idx];
+        if (!it || !it.str) continue;
+        let normalized = canonicalMoneyValue(it.str);
+        if (normalized) {
+          moneyItems.push({ x: Math.round(it.x), str: normalized });
+          continue;
+        }
+        if (!looksLikeMoneyFragment(it.str)) continue;
+        let combined = it.str;
+        let consumed = 0;
+        for (let advance = 1; advance <= 2 && (idx + advance) < rowItems.length; advance++) {
+          const next = rowItems[idx + advance];
+          if (!next || !next.str || !looksLikeMoneyFragment(next.str)) break;
+          combined += next.str;
+          normalized = canonicalMoneyValue(combined);
+          if (normalized) {
+            const xAvg = Math.round((it.x + next.x) / 2);
+            moneyItems.push({ x: xAvg, str: normalized });
+            consumed = advance;
+            break;
+          }
+        }
+        if (consumed) {
+          idx += consumed;
+        }
+      }
+      moneyItems.sort((a,b)=>a.x-b.x);
       let bal = null, pin = null, pout = null;
       if (moneyItems.length) {
         const assigned = assignMoneyByColumns(moneyItems, paymentType);
