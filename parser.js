@@ -257,10 +257,72 @@
       return best;
     }
 
+    function assignMoneyByColumns(moneyItems) {
+      if (!moneyItems.length) return { pin: '', pout: '', bal: '' };
+      const used = new Set();
+      const takeClosest = (targetX) => {
+        if (typeof targetX !== 'number') return null;
+        let bestIdx = -1;
+        let bestDist = Infinity;
+        for (let i = 0; i < moneyItems.length; i++) {
+          if (used.has(i)) continue;
+          const d = Math.abs(moneyItems[i].x - targetX);
+          if (d < bestDist) {
+            bestDist = d;
+            bestIdx = i;
+          }
+        }
+        if (bestIdx === -1) return null;
+        used.add(bestIdx);
+        return moneyItems[bestIdx];
+      };
+      const takeLeftMost = () => {
+        let bestIdx = -1;
+        let bestX = Infinity;
+        for (let i = 0; i < moneyItems.length; i++) {
+          if (used.has(i)) continue;
+          if (moneyItems[i].x < bestX) {
+            bestX = moneyItems[i].x;
+            bestIdx = i;
+          }
+        }
+        if (bestIdx === -1) return null;
+        used.add(bestIdx);
+        return moneyItems[bestIdx];
+      };
+      const takeRightMost = () => {
+        let bestIdx = -1;
+        let bestX = -Infinity;
+        for (let i = 0; i < moneyItems.length; i++) {
+          if (used.has(i)) continue;
+          if (moneyItems[i].x > bestX) {
+            bestX = moneyItems[i].x;
+            bestIdx = i;
+          }
+        }
+        if (bestIdx === -1) return null;
+        used.add(bestIdx);
+        return moneyItems[bestIdx];
+      };
+
+      let balanceTok = takeClosest(balanceX);
+      if (!balanceTok) balanceTok = takeRightMost();
+      let paidOutTok = takeClosest(paidOutX);
+      let paidInTok = takeClosest(paidInX);
+
+      if (!paidOutTok) paidOutTok = takeLeftMost();
+      if (!paidInTok) paidInTok = takeRightMost();
+
+      return {
+        pin: paidInTok ? paidInTok.str : '',
+        pout: paidOutTok ? paidOutTok.str : '',
+        bal: balanceTok ? balanceTok.str : ''
+      };
+    }
+
     const out = [];
     let currentDate = null;
     let lastRowObj = null;
-    const PAYMENT_TYPES = ['VIS','ATM','DD','TFR','CR','DR','POS','CHG','INT','SO','SOE','CHEQUE',')))' ];
     // If there are leading rows with no useful data (e.g., leftover image placeholders),
     // start processing from the first row that contains a date or a money token.
     const startIndex = rows.findIndex(r => r.items.some(it => (it.str||'').match(datePattern) || (it.str||'').match(moneyRegex)));
@@ -305,23 +367,10 @@
         .sort((a,b) => a.x - b.x);
       let bal = null, pin = null, pout = null;
       if (moneyItems.length) {
-        // Choose the right-most money token as the Balance (most statements place balance at the far right)
-        const balanceCandidate = moneyItems[moneyItems.length - 1];
-        bal = balanceCandidate.str;
-
-        // Remaining tokens on the left (could be 0,1,2...)
-        const remaining = moneyItems.slice(0, moneyItems.length - 1);
-
-        if (remaining.length === 1) {
-          // Single remaining amount: treat as Paid In if payment type looks like credit, otherwise Paid Out
-          const single = remaining[0].str;
-          const pt = (paymentType||'').toString();
-          if (isCreditType(pt)) pin = single; else pout = single;
-        } else if (remaining.length >= 2) {
-          // Multiple remaining amounts: assign left-most => Paid Out, right-most => Paid In
-          pout = remaining[0].str;
-          pin = remaining[remaining.length - 1].str;
-        }
+        const assigned = assignMoneyByColumns(moneyItems);
+        pin = assigned.pin || null;
+        pout = assigned.pout || null;
+        bal = assigned.bal || null;
       }
 
       if (date) {
