@@ -513,12 +513,20 @@
     // then clear the `balance` field. This follows the visual PDF rule that
     // balances appear only on the last entry for a date.
     const lastIndexByDate = {};
+    const lastIndexWithAmountsByDate = {};
     result.forEach((r, idx) => {
-      if (r.date) lastIndexByDate[r.date] = idx;
+      if (r.date) {
+        lastIndexByDate[r.date] = idx;
+        if (r.paidIn || r.paidOut || r.balance) {
+          lastIndexWithAmountsByDate[r.date] = idx;
+        }
+      }
     });
     for (let i = 0; i < result.length; i++) {
       const r = result[i];
-      const lastIdx = lastIndexByDate[r.date];
+      const lastIdx = (r.date && (lastIndexWithAmountsByDate[r.date] !== undefined))
+        ? lastIndexWithAmountsByDate[r.date]
+        : lastIndexByDate[r.date];
       if (lastIdx !== undefined && i !== lastIdx) {
         if (r.balance) {
           // move balance to the appropriate side if no side amount exists
