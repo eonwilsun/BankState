@@ -162,21 +162,51 @@
     }
 
     let paidOutX = null, paidInX = null, balanceX = null;
-    const outMatch = nearestMatch(paidCandidates, outCandidates);
-    if (outMatch) paidOutX = outMatch.b;
-    const inMatch = nearestMatch(paidCandidates, inCandidates);
-    if (inMatch) paidInX = inMatch.b;
+    // Prefer explicit header positions when present
     if (headerMap.balance) balanceX = headerMap.balance;
 
-    // Fill remaining from detected money columns (fallback)
-    if (!balanceX && uniqMoneyXs.length) balanceX = uniqMoneyXs[uniqMoneyXs.length-1];
-    if (!paidInX && uniqMoneyXs.length>=3) paidInX = uniqMoneyXs[uniqMoneyXs.length-2];
-    if (!paidOutX && uniqMoneyXs.length>=2) paidOutX = uniqMoneyXs[0];
+    // If we have money X positions, try to map them to Paid Out / Paid In by
+    // choosing the money column whose X is closest to the 'out' header and the
+    // one closest to the 'in' header. This handles statements where the two
+    // amount columns may appear in either order visually.
+    const moneyCols = uniqMoneyXs.slice();
+    if (moneyCols.length > 0) {
+      // If balanceX not set, assume the right-most money column is balance
+      if (!balanceX) balanceX = moneyCols[moneyCols.length - 1];
 
-    // If only two money columns and header positions exist, prefer header-based mapping
-    if (uniqMoneyXs.length === 2 && (paidInX || paidOutX)) {
-      if (!paidInX && headerMap.paidIn) paidInX = headerMap.paidIn;
-      if (!paidOutX && headerMap.paidOut) paidOutX = headerMap.paidOut;
+      // Consider candidate money columns excluding the balance column
+      const candidateMoney = moneyCols.filter(x => Math.abs(x - balanceX) > 1);
+
+      // Helper to compute nearest distance to a list
+      const nearestDistToList = (x, list) => {
+        if (!list || !list.length) return Infinity;
+        return Math.min(...list.map(v => Math.abs(x - v)));
+      };
+
+      // For each candidate money column, decide whether it's 'out' or 'in' by
+      // measuring proximity to the out/in header tokens (if available).
+      const assignments = candidateMoney.map(mx => {
+        const outD = nearestDistToList(mx, outCandidates);
+        const inD = nearestDistToList(mx, inCandidates);
+        return { x: mx, outD, inD };
+      });
+
+      // Prefer header-based assignment when header tokens are present
+      if (outCandidates.length || inCandidates.length) {
+        assignments.forEach(a => {
+          if (a.outD < a.inD) paidOutX = a.x;
+          else paidInX = a.x;
+        });
+      }
+
+      // Fallback: if we still don't have both, assign by left-to-right order
+      const assigned = [paidOutX, paidInX].filter(Boolean);
+      const unassigned = candidateMoney.filter(x => !assigned.includes(x));
+      const sortedCandidates = candidateMoney.sort((a,b)=>a-b);
+      if (!paidOutX && sortedCandidates.length) paidOutX = sortedCandidates[0];
+      if (!paidInX && sortedCandidates.length > 1) paidInX = sortedCandidates[1];
+      // If only one candidate and balance is separate, single amount likely Paid Out
+      if (!paidInX && !paidOutX && sortedCandidates.length === 1) paidOutX = sortedCandidates[0];
     }
 
     // Debug: log detected columns
