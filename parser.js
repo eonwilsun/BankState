@@ -20,7 +20,8 @@
   // Canonical payment-type tokens as they appear in statements.
   const PAYMENT_TYPES = ['VIS','ATM','DD','TFR','CR','DR','POS','CHG','INT','SO','SOE','CHEQUE',')))'];
 
-  function normalizePaidSides(target, fallbackPaymentType) {
+  function normalizePaidSides(target, fallbackPaymentType, opts) {
+    const preferColumnAssignments = !!(opts && opts.preferColumnAssignments);
     const ptRaw = (fallbackPaymentType !== undefined && fallbackPaymentType !== null && fallbackPaymentType !== '')
       ? fallbackPaymentType
       : (target.paymentType || '');
@@ -33,7 +34,7 @@
     if (credit && !target.paidIn && target.paidOut) {
       target.paidIn = target.paidOut;
       target.paidOut = '';
-    } else if (!credit && target.paidIn && !target.paidOut) {
+    } else if (!preferColumnAssignments && !credit && target.paidIn && !target.paidOut) {
       target.paidOut = target.paidIn;
       target.paidIn = '';
     }
@@ -335,7 +336,7 @@
       if (date) {
         currentDate = date;
         const t = { date: currentDate, paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
-        normalizePaidSides(t);
+        normalizePaidSides(t, paymentType, { preferColumnAssignments: true });
         out.push(t); lastRowObj = t;
       } else {
         // No explicit date on this line. If there are money tokens, this is a new
@@ -356,16 +357,16 @@
             if (detailsText) {
               if (!lastRowObj.details2) lastRowObj.details2 = detailsText; else lastRowObj.details2 += ' ' + detailsText;
             }
-            normalizePaidSides(lastRowObj, paymentType || lastRowObj.paymentType);
+            normalizePaidSides(lastRowObj, paymentType || lastRowObj.paymentType, { preferColumnAssignments: true });
           } else {
             const t = { date: currentDate || '', paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
-            normalizePaidSides(t, paymentType);
+            normalizePaidSides(t, paymentType, { preferColumnAssignments: true });
             if (!isHeaderText(t.details1) && (t.details1 || t.paymentType || t.paidOut || t.paidIn || t.balance)) { out.push(t); lastRowObj = t; }
           }
         } else if (paymentType) {
           // Payment type without amounts — treat as the start of a transaction row.
           const t = { date: currentDate || '', paymentType, details1: detailsText, details2: '', paidIn: '', paidOut: '', balance: '' };
-          normalizePaidSides(t);
+          normalizePaidSides(t, paymentType, { preferColumnAssignments: true });
           if (!isHeaderText(t.details1) && (t.details1 || t.paymentType)) { out.push(t); lastRowObj = t; }
         } else if (detailsText) {
           if (lastRowObj) { if (!lastRowObj.details2) lastRowObj.details2 = detailsText; else lastRowObj.details2 += ' ' + detailsText; }
@@ -447,7 +448,7 @@
           r.balance = '';
         }
       }
-      normalizePaidSides(r);
+      normalizePaidSides(r, r.paymentType, { preferColumnAssignments: true });
     }
 
     return result;
