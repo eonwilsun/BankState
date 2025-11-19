@@ -1,0 +1,28 @@
+(function(){
+  const out = document.getElementById('out');
+  function log(...args){ out.textContent += args.join(' ') + '\n'; }
+
+  // Basic unit tests for mapping money arrays and simple lines
+  function assertEq(a,b,msg){ if (JSON.stringify(a)!==JSON.stringify(b)) { log('FAIL:', msg); log('  expected:', JSON.stringify(b)); log('  got:     ', JSON.stringify(a)); throw new Error('Test failed: '+msg); } else { log('OK:', msg); } }
+
+  // Test 1: simple date + single amount (debit)
+  const lines1 = [ '12 Nov 16 VIS SOME SHOP 8.10 8.10 8.10' ];
+  const rows1 = parseLinesToTransactions(lines1);
+  assertEq(rows1.length, 1, 'single-row parsed');
+  assertEq(rows1[0].date, '12 Nov 16', 'date parsed');
+  // amounts appear left-to-right: paidOut, paidIn?, balance => with 3 tokens map to paidOut, paidIn, balance
+
+  // Test 2: continuation lines
+  const lines2 = [ '13 Nov 16', 'VIS SHOP NAME 7.99 7.99', 'MORE DETAILS' ];
+  const rows2 = parseLinesToTransactions(lines2);
+  assertEq(rows2.length, 1, 'continuation lines grouped');
+  assertEq(rows2[0].details2.includes('MORE DETAILS'), true, 'details2 contains continuation');
+
+  // Test 3: two money columns (left=paidOut, right=balance)
+  const lines3 = [ '14 Nov 16 TFR 50.00 850.00' ];
+  const rows3 = parseLinesToTransactions(lines3);
+  assertEq(rows3[0].paidOut, '50.00', 'paidOut mapped (two columns)');
+  assertEq(rows3[0].balance, '850.00', 'balance mapped (two columns)');
+
+  log('All tests passed.');
+})();
