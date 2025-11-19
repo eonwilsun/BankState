@@ -19,12 +19,12 @@ let parsedRows = [];
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js';
 
 // Helper to detect obvious header/footer lines (used by multiple parsers)
-function isHeaderText(s) {
+window.isHeaderText = function(s) {
   if (!s) return false;
   const ss = s.toLowerCase();
   if (ss.includes('payment type') || ss.includes('your bank account') || ss.includes('balance brought') || ss.includes('balance carried') || ss.includes('account name')) return true;
   return false;
-}
+};
 
 parseBtn.addEventListener('click', async () => {
   const file = fileInput.files && fileInput.files[0];
