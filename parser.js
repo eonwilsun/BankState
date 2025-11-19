@@ -233,6 +233,11 @@
       if (date) {
         currentDate = date;
         const t = { date: currentDate, paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
+        // If both paidIn and paidOut are present, choose one based on paymentType
+        if (t.paidIn && t.paidOut) {
+          const pt = (t.paymentType||'').toUpperCase();
+          if (pt === 'CR') t.paidOut = ''; else t.paidIn = '';
+        }
         out.push(t); lastRowObj = t;
       } else {
         // No explicit date on this line. If there are money tokens, this is a new
@@ -255,8 +260,17 @@
             }
           } else {
             const t = { date: currentDate || '', paymentType, details1: detailsText, details2: '', paidIn: pin||'', paidOut: pout||'', balance: bal||'' };
+            // If both paidIn and paidOut are present, select one based on paymentType
+            if (t.paidIn && t.paidOut) {
+              const pt = (t.paymentType||'').toUpperCase();
+              if (pt === 'CR') t.paidOut = ''; else t.paidIn = '';
+            }
             if (!isHeaderText(t.details1) && (t.details1 || t.paymentType || t.paidOut || t.paidIn || t.balance)) { out.push(t); lastRowObj = t; }
           }
+        } else if (paymentType) {
+          // Payment type without amounts — treat as the start of a transaction row.
+          const t = { date: currentDate || '', paymentType, details1: detailsText, details2: '', paidIn: '', paidOut: '', balance: '' };
+          if (!isHeaderText(t.details1) && (t.details1 || t.paymentType)) { out.push(t); lastRowObj = t; }
         } else if (detailsText) {
           if (lastRowObj) { if (!lastRowObj.details2) lastRowObj.details2 = detailsText; else lastRowObj.details2 += ' ' + detailsText; }
         }
@@ -271,7 +285,9 @@
 
     // Find the first real transaction: a row with a date that is NOT a summary/balance row
     const skipSummaryPattern = /balance brought|opening balance|payments in|payments out|closing balance|overdraft limit|balance carried/i;
-    const firstRealIdx = safeOut.findIndex(r => r.date && !(skipSummaryPattern.test((r.details1||'') + ' ' + (r.details2||''))));
+    // Find the first real transaction row: prefers a dated row that isn't a summary,
+    // but will also accept a paymentType row as a transaction start.
+    const firstRealIdx = safeOut.findIndex(r => ((r.date && !(skipSummaryPattern.test((r.details1||'') + ' ' + (r.details2||'')))) || (r.paymentType && !(skipSummaryPattern.test((r.details1||'') + ' ' + (r.details2||''))))));
     if (firstRealIdx > 0) return safeOut.slice(firstRealIdx);
     return safeOut;
   }
