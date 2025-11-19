@@ -200,7 +200,7 @@
     const out = [];
     let currentDate = null;
     let lastRowObj = null;
-    const PAYMENT_TYPES = ['VIS','ATM','DD','TFR','CR','DR','POS','CHG','INT','SO','SOE','CHEQUE'];
+    const PAYMENT_TYPES = ['VIS','ATM','DD','TFR','CR','DR','POS','CHG','INT','SO','SOE','CHEQUE',')))' ];
     // If there are leading rows with no useful data (e.g., leftover image placeholders),
     // start processing from the first row that contains a date or a money token.
     const startIndex = rows.findIndex(r => r.items.some(it => (it.str||'').match(datePattern) || (it.str||'').match(moneyRegex)));
